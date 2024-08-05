@@ -1,24 +1,55 @@
 #include "lighting_system.h"
+#include "raylib.h"
 
-#include <list>
+#include <array>
 
 namespace Lights
 {
     Shader LightShader = { 0 };
 
-    std::list<Light*> LightList;
+    std::array<Light*, MaxShaderLights> LightList;
+
+    static constexpr char ViewPosName[] = "viewPos";
+    static constexpr char EnabledName[] = "enabled";
+    static constexpr char TypedName[] = "type";
+    static constexpr char PositionName[] = "position";
+    static constexpr char DirectionName[] = "direction";
+    static constexpr char ColorName[] = "color";
+    static constexpr char AttenuationName[] = "attenuation";
+    static constexpr char FallofName[] = "falloff";
+    static constexpr char ConeName[] = "cone";
+
+    static float ColorScale = 1.0f / 255.0f;
 
     void SetLightingShader(Shader shader)
     {
         LightShader = shader;
+        LightShader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(LightShader, ViewPosName);
+
+        for (int i = 0; i < MaxShaderLights; i++)
+        {
+            if (LightList[i] == nullptr)
+                continue;
+
+            LightList[i]->OnBindToShader();
+        }
     }
 
     Light* AddLight(LightTypes lightType)
     {
-        if (LightList.size() == MaxShaderLights)
-            return nullptr;
-
         Light* newLight = nullptr;
+
+        int id = -1;
+        for (int i = 0; i < MaxShaderLights; i++)
+        {
+            if (LightList[i] == nullptr)
+            {
+                id = i;
+                break;
+            }
+        }
+        if (id == -1)
+            return newLight;
 
         switch (lightType)
         {
@@ -26,171 +57,210 @@ namespace Lights
             return nullptr;
 
         case LightTypes::Point:
-            newLight = new PointLight();
+            newLight = new PointLight(id);
             break;
 
         case LightTypes::Directional:
-            newLight = new DirectionalLight();
+            newLight = new DirectionalLight(id);
             break;
 
         case LightTypes::Spot:
-            newLight = new SpotLight();
+            newLight = new SpotLight(id);
             break;
+        }
+
+        LightList[id] = newLight;
+        return newLight;
+    }
+
+    void RemoveLight(Light* light)
+    {
+        for (int i = 0; i < MaxShaderLights; i++)
+        {
+            if (LightList[i] == light)
+            {
+                delete(light);
+                LightList[i] = nullptr;
+                return;
+            }
         }
     }
 
-    void RemoveLight(Light* light);
-
-    void ClearLights(Light* light);
-
-    void UpdateLights(const Camera3D& viewportCamear);
-}
-
-//----------------------------------------------------------------------------------
-// Defines and Macros
-//----------------------------------------------------------------------------------
-#define         MAX_LIGHTS            4         // Max dynamic lights supported by shader
-
-//----------------------------------------------------------------------------------
-// Types and Structures Definition
-//----------------------------------------------------------------------------------
-
-// Light data
-typedef struct {   
-    int type;
-    Vector3 position;
-    Vector3 target;
-    Color color;
-    bool enabled;
-    
-    // Shader locations
-    int enabledLoc;
-    int typeLoc;
-    int posLoc;
-    int targetLoc;
-    int colorLoc;
-} Light;
-
-// Light type
-typedef enum {
-    LIGHT_DIRECTIONAL,
-    LIGHT_POINT
-} LightType;
-
-#ifdef __cplusplus
-extern "C" {            // Prevents name mangling of functions
-#endif
-
-//----------------------------------------------------------------------------------
-// Module Functions Declaration
-//----------------------------------------------------------------------------------
-Light CreateLight(int type, Vector3 position, Vector3 target, Color color, Shader shader);   // Create a light and get shader locations
-void UpdateLightValues(Shader shader, Light light);         // Send light properties to shader
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // RLIGHTS_H
-
-
-/***********************************************************************************
-*
-*   RLIGHTS IMPLEMENTATION
-*
-************************************************************************************/
-
-#if defined(RLIGHTS_IMPLEMENTATION)
-
-#include "raylib.h"
-
-//----------------------------------------------------------------------------------
-// Defines and Macros
-//----------------------------------------------------------------------------------
-// ...
-
-//----------------------------------------------------------------------------------
-// Types and Structures Definition
-//----------------------------------------------------------------------------------
-// ...
-
-//----------------------------------------------------------------------------------
-// Global Variables Definition
-//----------------------------------------------------------------------------------
-static int lightsCount = 0;    // Current amount of created lights
-
-//----------------------------------------------------------------------------------
-// Module specific Functions Declaration
-//----------------------------------------------------------------------------------
-// ...
-
-//----------------------------------------------------------------------------------
-// Module Functions Definition
-//----------------------------------------------------------------------------------
-
-// Create a light and get shader locations
-Light CreateLight(int type, Vector3 position, Vector3 target, Color color, Shader shader)
-{
-    Light light = { 0 };
-
-    if (lightsCount < MAX_LIGHTS)
+    void ClearLights(Light* light)
     {
-        light.enabled = true;
-        light.type = type;
-        light.position = position;
-        light.target = target;
-        light.color = color;
-
-        // TODO: Below code doesn't look good to me, 
-        // it assumes a specific shader naming and structure
-        // Probably this implementation could be improved
-        char enabledName[32] = "lights[x].enabled\0";
-        char typeName[32] = "lights[x].type\0";
-        char posName[32] = "lights[x].position\0";
-        char targetName[32] = "lights[x].target\0";
-        char colorName[32] = "lights[x].color\0";
-        
-        // Set location name [x] depending on lights count
-        enabledName[7] = '0' + lightsCount;
-        typeName[7] = '0' + lightsCount;
-        posName[7] = '0' + lightsCount;
-        targetName[7] = '0' + lightsCount;
-        colorName[7] = '0' + lightsCount;
-
-        light.enabledLoc = GetShaderLocation(shader, enabledName);
-        light.typeLoc = GetShaderLocation(shader, typeName);
-        light.posLoc = GetShaderLocation(shader, posName);
-        light.targetLoc = GetShaderLocation(shader, targetName);
-        light.colorLoc = GetShaderLocation(shader, colorName);
-
-        UpdateLightValues(shader, light);
-        
-        lightsCount++;
+        for (int i = 0; i < MaxShaderLights; i++)
+        {
+            delete(LightList[i]);
+            LightList[i] = nullptr;
+        }
     }
 
-    return light;
+    void UpdateLights(const Camera3D& viewportCamera)
+    {
+        if (!IsShaderReady(LightShader))
+            return;
+
+        SetShaderValue(LightShader, LightShader.locs[SHADER_LOC_VECTOR_VIEW], &viewportCamera.position, SHADER_UNIFORM_VEC3);
+
+        for (int i = 0; i < MaxShaderLights; i++)
+        {
+            if (LightList[i] == nullptr)
+                continue;
+
+            if (LightList[i]->IsDirty())
+                LightList[i]->Update();
+        }
+    }
+
+    Light::Light(int id) : ID(id)
+    {
+        OnBindToShader();
+    }
+
+    Light::~Light()
+    {
+        // disable on destroy
+        if (IsShaderReady(LightShader) && EnabledLoc > 0)
+        {
+            int enabled = 0;
+            SetShaderValue(LightShader, EnabledLoc, &enabled, SHADER_UNIFORM_INT);
+        }
+    }
+
+    bool Light::Update()
+    {
+        if (!IsShaderReady(LightShader) || !IsDirty())
+            return false;
+
+        Dirty = false;
+
+        int enabled = 1;
+        int type = int(LightType);
+
+        SetShaderValue(LightShader, EnabledLoc, &enabled, SHADER_UNIFORM_INT);
+        SetShaderValue(LightShader, TypeLoc, &type, SHADER_UNIFORM_INT);
+
+        SetShaderValue(LightShader, PositionLoc, Position, SHADER_UNIFORM_VEC3);
+
+        SetShaderValue(LightShader, IntensityLoc, Intensity, SHADER_UNIFORM_VEC4);
+
+        SetShaderValue(LightShader, AttenuationLoc, &Attenuation, SHADER_UNIFORM_FLOAT);
+
+        SetShaderValue(LightShader, FalloffLoc, &Falloff, SHADER_UNIFORM_FLOAT);
+
+        return true;
+    }
+
+    void Light::SetPosition(const Vector3& pos)
+    {
+        Position[0] = pos.x;
+        Position[1] = pos.y;
+        Position[2] = pos.z;
+
+        SetDirty();
+    }
+
+    void Light::SetIntensity(const Color& color)
+    {
+        Intensity[0] = color.r * ColorScale;
+        Intensity[1] = color.g * ColorScale;
+        Intensity[2] = color.b * ColorScale;
+
+        SetDirty();
+    }
+
+    void Light::SetAttenuation(float attenuation)
+    {
+        Attenuation = attenuation;
+        SetDirty();
+    }
+
+    void Light::SetFalloff(float falloff)
+    {
+        Falloff = falloff;
+        SetDirty();
+    }
+
+    int Light::GetShaderLocation(std::string_view field)
+    {
+        FieldNameCache = "lights[" + std::to_string(ID) + "]." + field.data();
+
+        return ::GetShaderLocation(LightShader, FieldNameCache.c_str());
+    }
+
+    void Light::OnBindToShader()
+    {
+        SetDirty();
+        if (!IsShaderReady(LightShader))
+            return;
+
+        EnabledLoc = GetShaderLocation(EnabledName);
+        TypeLoc = GetShaderLocation(TypedName);
+        PositionLoc = GetShaderLocation(PositionName);
+        IntensityLoc = GetShaderLocation(ColorName);
+        AttenuationLoc = GetShaderLocation(AttenuationName);
+        FalloffLoc = GetShaderLocation(FallofName);
+    }
+
+    ///--------DirectionalLight-------------
+
+    DirectionalLight::DirectionalLight(int id)
+        :Light(id)
+    {
+        LightType = LightTypes::Directional;
+    }
+
+    void DirectionalLight::SetDirection(const Vector3& dir)
+    {
+        Direction[0] = dir.x;
+        Direction[1] = dir.y;
+        Direction[2] = dir.z;
+        SetDirty();
+    }
+
+    bool DirectionalLight::Update()
+    {
+        if (!Light::Update())
+            return false;
+
+        SetShaderValue(LightShader, DirectionLoc, Direction, SHADER_UNIFORM_VEC3);
+
+        return true;
+    }
+
+    void DirectionalLight::OnBindToShader()
+    {
+        Light::OnBindToShader();
+        DirectionLoc = GetShaderLocation(DirectionName);
+    }
+
+    ///--------SpotLight-------------
+
+    SpotLight::SpotLight(int id) 
+        : DirectionalLight(id)
+    {
+        LightType = LightTypes::Spot;
+    }
+
+    void SpotLight::SetConeAngle(const float &cone)
+    {
+        Cone = cone;
+        SetDirty();
+    }
+
+    bool SpotLight::Update()
+    {
+        if (!DirectionalLight::Update())
+            return false;
+
+        SetShaderValue(LightShader, ConeLoc, &Cone, SHADER_UNIFORM_FLOAT);
+
+        return true;
+    }
+
+    void SpotLight::OnBindToShader()
+    {
+        DirectionalLight::OnBindToShader();
+        ConeLoc = GetShaderLocation(ConeName);
+    }
 }
-
-// Send light properties to shader
-// NOTE: Light shader locations should be available 
-void UpdateLightValues(Shader shader, Light light)
-{
-    // Send to shader light enabled state and type
-    SetShaderValue(shader, light.enabledLoc, &light.enabled, SHADER_UNIFORM_INT);
-    SetShaderValue(shader, light.typeLoc, &light.type, SHADER_UNIFORM_INT);
-
-    // Send to shader light position values
-    float position[3] = { light.position.x, light.position.y, light.position.z };
-    SetShaderValue(shader, light.posLoc, position, SHADER_UNIFORM_VEC3);
-
-    // Send to shader light target position values
-    float target[3] = { light.target.x, light.target.y, light.target.z };
-    SetShaderValue(shader, light.targetLoc, target, SHADER_UNIFORM_VEC3);
-
-    // Send to shader light color values
-    float color[4] = { (float)light.color.r/(float)255, (float)light.color.g/(float)255, 
-                       (float)light.color.b/(float)255, (float)light.color.a/(float)255 };
-    SetShaderValue(shader, light.colorLoc, color, SHADER_UNIFORM_VEC4);
-}
-
-#endif // RLIGHTS_IMPLEMENTATION

@@ -18,19 +18,17 @@ out vec4 finalColor;
 #define     MAX_LIGHTS              4
 #define     LIGHT_DIRECTIONAL       0
 #define     LIGHT_POINT             1
-
-struct MaterialProperty {
-    vec3 color;
-    int useSampler;
-    sampler2D sampler;
-};
+#define     LIGHT_SPOT              2
 
 struct Light {
     int enabled;
     int type;
     vec3 position;
-    vec3 target;
+    vec3 direction;
     vec4 color;
+    float attenuation;
+    float falloff;
+    float cone;
 };
 
 // Input lighting values
@@ -47,8 +45,6 @@ void main()
     vec3 viewD = normalize(viewPos - fragPosition);
     vec3 specular = vec3(0.0);
 
-    // NOTE: Implement here your fragment shader code
-
     for (int i = 0; i < MAX_LIGHTS; i++)
     {
         if (lights[i].enabled == 1)
@@ -57,7 +53,7 @@ void main()
 
             if (lights[i].type == LIGHT_DIRECTIONAL)
             {
-                light = -normalize(lights[i].target - lights[i].position);
+                light = -normalize(lights[i].direction);
             }
 
             if (lights[i].type == LIGHT_POINT)
@@ -69,12 +65,14 @@ void main()
             lightDot += lights[i].color.rgb*NdotL;
 
             float specCo = 0.0;
-            if (NdotL > 0.0) specCo = pow(max(0.0, dot(viewD, reflect(-(light), normal))), 16.0); // 16 refers to shine
+            if (NdotL > 0.0)
+                specCo = pow(max(0.0, dot(viewD, reflect(-(light), normal))), 16.0); // 16 refers to shine
+
             specular += specCo;
         }
     }
 
-    finalColor = (texelColor*((colDiffuse + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
+    finalColor = (texelColo r* ((colDiffuse + vec4(specular, 1.0)) * vec4(lightDot, 1.0)));
     finalColor += texelColor*(ambient/10.0)*colDiffuse;
 
     // Gamma correction

@@ -26,11 +26,19 @@ For a C++ project simply rename the file to .cpp and run premake
 
 #include "raylib.h"
 
+#include "resource_dir.h"
+#include "lighting_system.h"
+
 int main ()
 {
+	SearchAndSetResourceDir("resources");
+
 	// set up the window
 	InitWindow(1280, 800, "Hello Raylib");
 	
+	Lights::SetLightingShader(LoadShader("shaders/lighting.vert", "shaders/lighting.frag"));
+
+
 	// game loop
 	while (!WindowShouldClose())
 	{

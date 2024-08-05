@@ -1,6 +1,11 @@
 #pragma once
 
-#include "raylib.h"
+#include <string>
+
+struct Shader;
+struct Camera3D;
+struct Vector3;
+struct Color;
 
 namespace Lights
 {
@@ -12,8 +17,8 @@ namespace Lights
 
     enum class LightTypes
     {
-        Point = 0,
-        Directional = 1,
+        Directional = 0,
+        Point = 1,
         Spot = 2
     };
 
@@ -21,9 +26,9 @@ namespace Lights
     {
     public:
         Light(int id);
-        virtual ~Light() = default;
+        virtual ~Light();
 
-        virtual void Update();
+        virtual bool Update();
 
         bool IsDirty() const { return Dirty; }
 
@@ -34,13 +39,15 @@ namespace Lights
         void SetAttenuation(float attenuation);
         void SetFalloff(float falloff);
 
+        virtual void OnBindToShader();
+
     protected:
         int ID = 0;
 
         LightTypes LightType = LightTypes::Directional;
 
-        Vector3 Position = { 0,0,0 };
-        Color Intensity = { 255,255,255,255 };
+        float Position[3] = {0,0,0};
+        float Intensity[4] = {1,1,1,1};
 
         float Attenuation = 25;
         float Falloff = 50;
@@ -48,41 +55,53 @@ namespace Lights
         // Shader locations
         int EnabledLoc = -1;
         int TypeLoc = -1;
-        int PosLoc = -1;
+        int PositionLoc = -1;
         int IntensityLoc = -1;
-
-        virtual void OnBindToShader();
+        int AttenuationLoc = -1;
+        int FalloffLoc = -1;
 
         void SetDirty() { Dirty = true; }
 
+        int GetShaderLocation(std::string_view field);
+
     private:
         bool Dirty = false;
+        std::string FieldNameCache;
     };
 
     class PointLight : public Light
     {
     public:
-        PointLight();
+        PointLight(int id) : Light(id) { LightType = LightTypes::Point; }
     };
 
     class DirectionalLight : public Light
     {
     public:
-        DirectionalLight();
+        DirectionalLight(int id);
 
         void SetDirection(const Vector3& dir);
+
+        bool Update() override;
+        void OnBindToShader() override;
+
     protected:
-        Vector3 Direction = { 1,-1,1 };
+        float Direction[3] = {1,-1,1};
+        int DirectionLoc = -1;
     };
 
     class SpotLight : public DirectionalLight
     {
     public:
-        SpotLight();
+        SpotLight(int id);
 
-        void SetConeAngle(const Vector3& dir);
+        void SetConeAngle(const float& cone);
+        bool Update() override;
+        void OnBindToShader() override;
+
     protected:
         float Cone = 45;
+        int ConeLoc = -1;
     };
 
     void SetLightingShader(Shader shader);
