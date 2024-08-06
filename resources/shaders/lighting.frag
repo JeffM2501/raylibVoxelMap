@@ -50,19 +50,36 @@ void main()
         if (lights[i].enabled == 1)
         {
             vec3 light = vec3(0.0);
-
+            float factor = 1;
             if (lights[i].type == LIGHT_DIRECTIONAL)
             {
                 light = -normalize(lights[i].direction);
             }
-
-            if (lights[i].type == LIGHT_POINT)
+            else
             {
+                float dist = distance(lights[i].position, fragPosition);
+
+                if (dist > lights[i].attenuation)
+                {
+                    if (dist > lights[i].attenuation + lights[i].falloff)
+                        factor = 0;
+                    else
+                        factor = 1.0f - ((dist - lights[i].attenuation)/lights[i].falloff);
+                }
+
                 light = normalize(lights[i].position - fragPosition);
+
+                if (lights[i].type == LIGHT_SPOT)
+                {
+                    float dotp = dot(light, lights[i].direction);
+                    if (dotp < cos(lights[i].cone))
+                        factor = 0;
+                }
             }
 
             float NdotL = max(dot(normal, light), 0.0);
-            lightDot += lights[i].color.rgb*NdotL;
+
+            lightDot += lights[i].color.rgb * factor * NdotL;
 
             float specCo = 0.0;
             if (NdotL > 0.0)
@@ -72,8 +89,8 @@ void main()
         }
     }
 
-    finalColor = (texelColo r* ((colDiffuse + vec4(specular, 1.0)) * vec4(lightDot, 1.0)));
-    finalColor += texelColor*(ambient/10.0)*colDiffuse;
+    finalColor = (texelColor * ((colDiffuse + vec4(specular, 1.0)) * vec4(lightDot, 1.0)));
+    finalColor += texelColor * (ambient/10.0)*colDiffuse;
 
     // Gamma correction
     finalColor = pow(finalColor, vec4(1.0/2.2));

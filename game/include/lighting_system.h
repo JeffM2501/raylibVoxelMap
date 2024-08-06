@@ -49,8 +49,8 @@ namespace Lights
         float Position[3] = {0,0,0};
         float Intensity[4] = {1,1,1,1};
 
-        float Attenuation = 25;
-        float Falloff = 50;
+        float Attenuation = 5;
+        float Falloff = 10;
 
         // Shader locations
         int EnabledLoc = -1;
@@ -105,6 +105,7 @@ namespace Lights
     };
 
     void SetLightingShader(Shader shader);
+    Shader GetLightingShader();
 
     Light* AddLight(LightTypes lightType);
     void RemoveLight(Light* light);

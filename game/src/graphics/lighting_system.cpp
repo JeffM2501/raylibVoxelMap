@@ -35,6 +35,11 @@ namespace Lights
         }
     }
 
+    Shader GetLightingShader()
+    {
+        return LightShader;
+    }
+
     Light* AddLight(LightTypes lightType)
     {
         Light* newLight = nullptr;
