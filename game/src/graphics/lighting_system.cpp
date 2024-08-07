@@ -18,13 +18,19 @@ namespace Lights
     static constexpr char AttenuationName[] = "attenuation";
     static constexpr char FallofName[] = "falloff";
     static constexpr char ConeName[] = "cone";
+    static constexpr char AmbientName[] = "ambient";
 
     static float ColorScale = 1.0f / 255.0f;
+
+    static float Ambient[4] = { 0.05f ,0.05f, 0.05f, 1.0f };
+    static int AmbientLoc = -1;
 
     void SetLightingShader(Shader shader)
     {
         LightShader = shader;
         LightShader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(LightShader, ViewPosName);
+
+        AmbientLoc = GetShaderLocation(shader, AmbientName);
 
         for (int i = 0; i < MaxShaderLights; i++)
         {
@@ -73,7 +79,7 @@ namespace Lights
             newLight = new SpotLight(id);
             break;
         }
-
+        newLight->OnBindToShader();
         LightList[id] = newLight;
         return newLight;
     }
@@ -100,10 +106,18 @@ namespace Lights
         }
     }
 
+    void SetAmbientColor(Color color)
+    {
+        Ambient[0] = color.r * ColorScale;
+        Ambient[1] = color.g * ColorScale;
+        Ambient[2] = color.b * ColorScale;
+    }
+
     void UpdateLights(const Camera3D& viewportCamera)
     {
         if (!IsShaderReady(LightShader))
             return;
+        SetShaderValue(LightShader, AmbientLoc, Ambient, SHADER_UNIFORM_VEC4);
 
         SetShaderValue(LightShader, LightShader.locs[SHADER_LOC_VECTOR_VIEW], &viewportCamera.position, SHADER_UNIFORM_VEC3);
 
@@ -119,7 +133,6 @@ namespace Lights
 
     Light::Light(int id) : ID(id)
     {
-        OnBindToShader();
     }
 
     Light::~Light()

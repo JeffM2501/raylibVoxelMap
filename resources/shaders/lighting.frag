@@ -59,7 +59,7 @@ void main()
             {
                 float dist = distance(lights[i].position, fragPosition);
 
-                if (dist > lights[i].attenuation)
+                if (lights[i].attenuation > 0 && dist > lights[i].attenuation)
                 {
                     if (dist > lights[i].attenuation + lights[i].falloff)
                         factor = 0;
@@ -71,9 +71,16 @@ void main()
 
                 if (lights[i].type == LIGHT_SPOT)
                 {
-                    float dotp = dot(light, lights[i].direction);
-                    if (dotp < cos(lights[i].cone))
+                    float dotp = dot(-light, normalize(lights[i].direction));
+                    if (dotp < lights[i].cone)
+                    {   
                         factor = 0;
+                    }
+                    else
+                    {
+                        if (dotp > lights[i].cone * 0.5f)
+                            factor *= ((dotp - lights[i].cone) * (1.0f/(1.0f- lights[i].cone)));
+                    }
                 }
             }
 
@@ -90,7 +97,7 @@ void main()
     }
 
     finalColor = (texelColor * ((colDiffuse + vec4(specular, 1.0)) * vec4(lightDot, 1.0)));
-    finalColor += texelColor * (ambient/10.0)*colDiffuse;
+    finalColor += texelColor * (ambient)*colDiffuse;
 
     // Gamma correction
     finalColor = pow(finalColor, vec4(1.0/2.2));

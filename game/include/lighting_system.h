@@ -9,11 +9,7 @@ struct Color;
 
 namespace Lights
 {
-    //----------------------------------------------------------------------------------
-    // Defines and Macros
-    //----------------------------------------------------------------------------------
-    static constexpr int MaxShaderLights = 4; // Max dynamic lights supported by shader
-
+   static constexpr int MaxShaderLights = 4; // Max dynamic lights supported by shader
 
     enum class LightTypes
     {
@@ -106,6 +102,8 @@ namespace Lights
 
     void SetLightingShader(Shader shader);
     Shader GetLightingShader();
+
+    void SetAmbientColor(Color color);
 
     Light* AddLight(LightTypes lightType);
     void RemoveLight(Light* light);

@@ -36,9 +36,12 @@ int main ()
 {
 	SearchAndSetResourceDir("resources");
 
+
 	// set up the window
+	SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
 	InitWindow(1280, 800, "Voxels");
-	
+	SetTargetFPS(500);
+
 	Lights::SetLightingShader(LoadShader("shaders/lighting.vert", "shaders/lighting.frag"));
 
 	Camera3D ViewCamera = { 0 };
@@ -54,22 +57,29 @@ int main ()
 	
 	Mesh cube = GenMeshCube(2, 2, 2);
 
-
-	Vector3 lightPos = { 10, 10, -10 };
+	Vector3 lightPos = { 8, 10, -8 };
 	Vector3 lightDirection = { -1,-1, 1 };
 
-	auto* light = static_cast<Lights::SpotLight*>(Lights::AddLight(Lights::LightTypes::Point));
+	float cone = 15;
+
+	auto* light = static_cast<Lights::SpotLight*>(Lights::AddLight(Lights::LightTypes::Spot));
 	light->SetPosition(lightPos);
-	//light->SetDirection(lightDirection);
+	light->SetDirection(lightDirection);
+	light->SetConeAngle(cosf(DEG2RAD * cone));
 
-	//light->SetConeAngle(DEG2RAD * 30);
+	float attenuation = 15;
+	float falloff = 20;
 
-	float attenuation = 5;
-	float falloff = 10;
+	light->SetFalloff(falloff);
+	light->SetAttenuation(attenuation);
 
-//     auto* light2 = Lights::AddLight(Lights::LightTypes::Point);
-//     light2->SetPosition(Vector3{ -10, 10, -10 });
-// 	light2->SetIntensity(PINK);
+	Vector3 light2Pos = { -3, 3, -3 };
+
+	auto* light2 = Lights::AddLight(Lights::LightTypes::Point);
+	light2->SetPosition(light2Pos);
+	light2->SetIntensity(PINK);
+	light2->SetFalloff(3);
+	light2->SetAttenuation(1);
 
 	// game loop
 	while (!WindowShouldClose())
@@ -84,46 +94,55 @@ int main ()
 		float speed = 10 * GetFrameTime();
 		if (IsKeyDown(KEY_W))
 			CameraTransform.MoveD(speed);
-        if (IsKeyDown(KEY_S))
-            CameraTransform.MoveD(-speed);
-        if (IsKeyDown(KEY_A))
-            CameraTransform.MoveH(speed);
-        if (IsKeyDown(KEY_D))
-            CameraTransform.MoveH(-speed);
-        if (IsKeyDown(KEY_E))
-            CameraTransform.MoveV(speed);
-        if (IsKeyDown(KEY_Q))
-            CameraTransform.MoveV(-speed);
+		if (IsKeyDown(KEY_S))
+			CameraTransform.MoveD(-speed);
+		if (IsKeyDown(KEY_A))
+			CameraTransform.MoveH(speed);
+		if (IsKeyDown(KEY_D))
+			CameraTransform.MoveH(-speed);
+		if (IsKeyDown(KEY_E))
+			CameraTransform.MoveV(speed);
+		if (IsKeyDown(KEY_Q))
+			CameraTransform.MoveV(-speed);
 
 
-        float increment = 0.5f;
-        if (IsKeyPressed(KEY_UP))
-        {
-            attenuation += increment;
-            light->SetAttenuation(attenuation);
-        }
-        if (IsKeyPressed(KEY_DOWN))
-        {
-            attenuation -= increment;
-            light->SetAttenuation(attenuation);
-        }
+		float increment = 0.5f;
+		if (IsKeyPressed(KEY_UP))
+		{
+			attenuation += increment;
+			light->SetAttenuation(attenuation);
+		}
+		if (IsKeyPressed(KEY_DOWN))
+		{
+			attenuation -= increment;
+			light->SetAttenuation(attenuation);
+		}
 
-        if (IsKeyPressed(KEY_RIGHT))
-        {
-            falloff += increment;
-            light->SetFalloff(falloff);
-        }
-        if (IsKeyPressed(KEY_LEFT))
-        {
-            falloff -= increment;
-            light->SetFalloff(falloff);
-        }
+		if (IsKeyPressed(KEY_RIGHT))
+		{
+			falloff += increment;
+			light->SetFalloff(falloff);
+		}
+		if (IsKeyPressed(KEY_LEFT))
+		{
+			falloff -= increment;
+			light->SetFalloff(falloff);
+		}
+
+		if (IsKeyPressed(KEY_R))
+		{
+			cone += 1.0f;
+			light->SetConeAngle(cosf(DEG2RAD * cone));
+		}
+		if (IsKeyPressed(KEY_T))
+		{
+			cone -= 1.0f;
+			light->SetConeAngle(cosf(DEG2RAD * cone));
+		}
 
 		// drawing
 		BeginDrawing();
 		ClearBackground(DARKGRAY);
-
-	
 
 		CameraTransform.SetCamera(ViewCamera);
 		Lights::UpdateLights(ViewCamera);
@@ -134,10 +153,12 @@ int main ()
 		DrawSphere(lightPos, 0.25f, WHITE);
 		DrawLine3D(lightPos, lightPos + (lightDirection * 20), YELLOW);
 
-		DrawMesh(cube, cubeMat, MatrixTranslate(0,1,0));
+		DrawSphere(light2Pos, 0.25f, PINK);
+
+		DrawMesh(cube, cubeMat, MatrixTranslate(0, 1, 0));
 
 		BeginShaderMode(cubeMat.shader);
-		DrawPlane(Vector3Zero(), Vector2{ 20,20 }, GRAY);
+		DrawPlane(Vector3{ 0, -0.01f, 0 }, Vector2{ 20,20 }, GRAY);
 		EndShaderMode();
 
 		EndMode3D();
