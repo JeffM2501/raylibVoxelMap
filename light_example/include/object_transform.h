@@ -310,12 +310,11 @@ public:
         Orientation = QuaternionMultiply(rot, Orientation);
     }
 
-    inline void SetCamera(Camera3D& camera, bool yUp = true)
+    inline void SetCamera(Camera3D& camera)
     {
         camera.position = Vector3Transform(Vector3Zero(), GetWorldMatrix());
-        camera.target = Vector3Transform(yUp ? Vector3{ 0,0,1 } : Vector3{ 1,0,0 }, WorldMatrix);
-
-        camera.up = Vector3Subtract(Vector3Transform(yUp ? Vector3{ 0,1,0 } : Vector3{ 0,0,1 }, WorldMatrix), camera.position);
+        camera.target = Vector3Transform(Vector3{0,0,1}, WorldMatrix);
+        camera.up = Vector3Subtract(Vector3Transform(Vector3{ 0,1,0 }, WorldMatrix), camera.target);
     }
 
     inline void PushMatrix()

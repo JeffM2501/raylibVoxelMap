@@ -3,18 +3,18 @@ Raylib example file.
 This is an example main file for a simple raylib project.
 Use this as a starting point or replace it with your code.
 
-For a C++ project simply rename the file to .cpp and run premake 
+For a C++ project simply rename the file to .cpp and run premake
 
 -- Copyright (c) 2020-2024 Jeffery Myers
 --
---This software is provided "as-is", without any express or implied warranty. In no event 
+--This software is provided "as-is", without any express or implied warranty. In no event
 --will the authors be held liable for any damages arising from the use of this software.
 
---Permission is granted to anyone to use this software for any purpose, including commercial 
+--Permission is granted to anyone to use this software for any purpose, including commercial
 --applications, and to alter it and redistribute it freely, subject to the following restrictions:
 
---  1. The origin of this software must not be misrepresented; you must not claim that you 
---  wrote the original software. If you use this software in a product, an acknowledgment 
+--  1. The origin of this software must not be misrepresented; you must not claim that you
+--  wrote the original software. If you use this software in a product, an acknowledgment
 --  in the product documentation would be appreciated but is not required.
 --
 --  2. Altered source versions must be plainly marked as such, and must not be misrepresented
@@ -32,142 +32,166 @@ For a C++ project simply rename the file to .cpp and run premake
 #include "object_transform.h"
 #include "raymath_operators.h"
 
-int main ()
+
+#include "voxel_lib.h"
+#include "chunk_mesher.h"
+
+#include "external/stb_perlin.h"
+
+using namespace Voxels;
+
+constexpr BlockType Air = 0;
+constexpr BlockType Grass = 1;
+constexpr BlockType Dirt = 2;
+constexpr BlockType Stone = 3;
+constexpr BlockType Bedrock = 4;
+
+Texture2D BlockTexture = { 0 };
+
+World   Map;
+
+void SetupBlocks()
 {
-	SearchAndSetResourceDir("resources");
+    BlockTexture = LoadTexture("blockmap.png");
+
+    float blockWidth = 1.0f/8.0f;
+    float blockHeight = 1;
+
+    SetBlockInfo(Air, Rectangle{ 0,0,0,0 }, false);
+    SetBlockInfo(Grass, Rectangle{ blockWidth * 2,0,blockWidth * 3,blockHeight }, Rectangle{ 0,0,blockWidth,blockHeight }, Rectangle{ blockWidth,0,blockWidth*2,blockHeight });
+    SetBlockInfo(Dirt, Rectangle{ blockWidth,0,blockWidth*2,blockHeight });
+    SetBlockInfo(Stone, Rectangle{ blockWidth * 3,0,blockWidth * 4,blockHeight });
+    SetBlockInfo(Bedrock, Rectangle{ blockWidth * 4,0,blockWidth * 5,blockHeight });
 
 
-	// set up the window
-	SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
-	InitWindow(1280, 800, "Voxels");
-	SetTargetFPS(500);
+    constexpr int chunkCount = 5;
 
-	Lights::SetLightingShader(LoadShader("shaders/lighting.vert", "shaders/lighting.frag"));
+    for (int chunkH = -chunkCount; chunkH < chunkCount; chunkH++)
+    {
+        for (int chunkV = -chunkCount; chunkV < chunkCount; chunkV++)
+        {
+            Chunk& TestChunk = Map.AddChunk(chunkH, chunkV);
 
-	Camera3D ViewCamera = { 0 };
-	ViewCamera.fovy = 45;
-	ObjectTransform CameraTransform(false);
-	CameraTransform.SetPosition(0, 2, -10);
+            for (int v = 0; v < Chunk::ChunkSize; v++)
+            {
+                for (int h = 0; h < Chunk::ChunkSize; h++)
+                {
+                    float hvScale = 0.02f;
 
-	CameraTransform.SetCamera(ViewCamera);
+                    int64_t worldH = (h + (chunkH * Chunk::ChunkSize));
+                    int64_t worldV = (v + (chunkV * Chunk::ChunkSize));
 
+                    int depthLimit = 8 + int((stb_perlin_fbm_noise3(worldH * hvScale, worldV * hvScale, 1.0f, 2.0f, 0.5f, 6) + 1) * 0.5f * 16);
 
-	Material cubeMat = LoadMaterialDefault();
-	cubeMat.shader = Lights::GetLightingShader();
-	
-	Mesh cube = GenMeshCube(2, 2, 2);
+                    for (int d = 0; d < depthLimit; d++)
+                    {
+                        if (d == 0)
+                            TestChunk.SetVoxel(h, v, d, Bedrock);
+                        else if (d < 4)
+                            TestChunk.SetVoxel(h, v, d, Stone);
+                        else if (d == depthLimit - 1)
+                            TestChunk.SetVoxel(h, v, d, Grass);
+                        else
+                            TestChunk.SetVoxel(h, v, d, Dirt);
+                    }
+                }
+            }
 
-	Vector3 lightPos = { 8, 10, -8 };
-	Vector3 lightDirection = { -1,-1, 1 };
+            ChunkMesher mesher(Map, TestChunk.Id);
+            mesher.BuildMesh();
 
-	float cone = 15;
+            TestChunk.ChunkMesh = mesher.GetMesh();
+            UploadMesh(&TestChunk.ChunkMesh, false);
+        }
+    }
+}
 
-	auto* light = static_cast<Lights::SpotLight*>(Lights::AddLight(Lights::LightTypes::Spot));
-	light->SetPosition(lightPos);
-	light->SetDirection(lightDirection);
-	light->SetConeAngle(cosf(DEG2RAD * cone));
+int main()
+{
+    SearchAndSetResourceDir("resources");
 
-	float attenuation = 15;
-	float falloff = 20;
+    // set up the window
+    SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
+    InitWindow(1280, 800, "Voxels");
+    SetTargetFPS(500);
 
-	light->SetFalloff(falloff);
-	light->SetAttenuation(attenuation);
+    SetupBlocks();
 
-	Vector3 light2Pos = { -3, 3, -3 };
+    Lights::SetLightingShader(LoadShader("shaders/lighting.vert", "shaders/lighting.frag"));
 
-	auto* light2 = Lights::AddLight(Lights::LightTypes::Point);
-	light2->SetPosition(light2Pos);
-	light2->SetIntensity(PINK);
-	light2->SetFalloff(3);
-	light2->SetAttenuation(1);
+    Camera3D ViewCamera = { 0 };
+    ViewCamera.fovy = 45;
+    ObjectTransform CameraTransform(false);
 
-	// game loop
-	while (!WindowShouldClose())
-	{
-		if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
-		{
-			constexpr float mouseFactor = 0.1f;
-			CameraTransform.RotateY(GetMouseDelta().x * -mouseFactor);
-			CameraTransform.RotateH(GetMouseDelta().y * -mouseFactor);
-		}
+    CameraTransform.SetPosition(0, Chunk::ChunkHeight * 0.25f, -10);
+    CameraTransform.SetCamera(ViewCamera);
 
-		float speed = 10 * GetFrameTime();
-		if (IsKeyDown(KEY_W))
-			CameraTransform.MoveD(speed);
-		if (IsKeyDown(KEY_S))
-			CameraTransform.MoveD(-speed);
-		if (IsKeyDown(KEY_A))
-			CameraTransform.MoveH(speed);
-		if (IsKeyDown(KEY_D))
-			CameraTransform.MoveH(-speed);
-		if (IsKeyDown(KEY_E))
-			CameraTransform.MoveV(speed);
-		if (IsKeyDown(KEY_Q))
-			CameraTransform.MoveV(-speed);
+    Material cubeMat = LoadMaterialDefault();
+    cubeMat.shader = Lights::GetLightingShader();
+    cubeMat.maps[MATERIAL_MAP_ALBEDO].texture = BlockTexture;
 
+    Vector3 lightDirection = { -2, -3, 1 };
+    auto* light = static_cast<Lights::DirectionalLight*>(Lights::AddLight(Lights::LightTypes::Directional));
+    light->SetDirection(lightDirection);
 
-		float increment = 0.5f;
-		if (IsKeyPressed(KEY_UP))
-		{
-			attenuation += increment;
-			light->SetAttenuation(attenuation);
-		}
-		if (IsKeyPressed(KEY_DOWN))
-		{
-			attenuation -= increment;
-			light->SetAttenuation(attenuation);
-		}
+    // game loop
+    while (!WindowShouldClose())
+    {
+        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+        {
+            constexpr float mouseFactor = 0.1f;
+            CameraTransform.RotateY(GetMouseDelta().x * -mouseFactor);
+            CameraTransform.RotateH(GetMouseDelta().y * -mouseFactor);
+        }
 
-		if (IsKeyPressed(KEY_RIGHT))
-		{
-			falloff += increment;
-			light->SetFalloff(falloff);
-		}
-		if (IsKeyPressed(KEY_LEFT))
-		{
-			falloff -= increment;
-			light->SetFalloff(falloff);
-		}
+        float speed = 10 * GetFrameTime();
+        if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))
+            speed *= 5;
 
-		if (IsKeyPressed(KEY_R))
-		{
-			cone += 1.0f;
-			light->SetConeAngle(cosf(DEG2RAD * cone));
-		}
-		if (IsKeyPressed(KEY_T))
-		{
-			cone -= 1.0f;
-			light->SetConeAngle(cosf(DEG2RAD * cone));
-		}
+        if (IsKeyDown(KEY_W))
+            CameraTransform.MoveD(speed);
+        if (IsKeyDown(KEY_S))
+            CameraTransform.MoveD(-speed);
+        if (IsKeyDown(KEY_A))
+            CameraTransform.MoveH(speed);
+        if (IsKeyDown(KEY_D))
+            CameraTransform.MoveH(-speed);
+        if (IsKeyDown(KEY_E))
+            CameraTransform.MoveV(speed);
+        if (IsKeyDown(KEY_Q))
+            CameraTransform.MoveV(-speed);
 
-		// drawing
-		BeginDrawing();
-		ClearBackground(DARKGRAY);
+       
+        // drawing
+        BeginDrawing();
+        ClearBackground(DARKGRAY);
 
-		CameraTransform.SetCamera(ViewCamera);
-		Lights::UpdateLights(ViewCamera);
-		BeginMode3D(ViewCamera);
+        CameraTransform.SetCamera(ViewCamera);
+        Lights::UpdateLights(ViewCamera);
+        BeginMode3D(ViewCamera);
 
-		DrawGrid(10, 1);
+        DrawGrid(100, 1);
+        rlDrawRenderBatchActive();
 
-		DrawSphere(lightPos, 0.25f, WHITE);
-		DrawLine3D(lightPos, lightPos + (lightDirection * 20), YELLOW);
+        for (const auto& [id, chunk] : Map.Chunks)
+        {
+            DrawMesh(chunk.ChunkMesh, cubeMat, MatrixTranslate(chunk.Id.Coordinate.h * float(Chunk::ChunkSize), 0, chunk.Id.Coordinate.v * float(Chunk::ChunkSize)));
+        }
 
-		DrawSphere(light2Pos, 0.25f, PINK);
+        rlDisableDepthTest();
+        DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 10,0,0 }, RED);
+        DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,5,0 }, GREEN);
+        DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,0,10 }, BLUE);
+        rlDrawRenderBatchActive();
+        rlEnableDepthTest();
 
-		DrawMesh(cube, cubeMat, MatrixTranslate(0, 1, 0));
+        EndMode3D();
+        DrawFPS(0, 0);
 
-		BeginShaderMode(cubeMat.shader);
-		DrawPlane(Vector3{ 0, -0.01f, 0 }, Vector2{ 20,20 }, GRAY);
-		EndShaderMode();
+        EndDrawing();
+    }
 
-		EndMode3D();
-		DrawFPS(0, 0);
-		
-		EndDrawing();
-	}
-
-	// cleanup
-	CloseWindow();
-	return 0;
+    // cleanup
+    CloseWindow();
+    return 0;
 }

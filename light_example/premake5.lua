@@ -1,5 +1,3 @@
-// C library
-/*
 -- Copyright (c) 2020-2024 Jeffery Myers
 --
 --This software is provided "as-is", without any express or implied warranty. In no event 
@@ -16,40 +14,37 @@
 --  as being the original software.
 --
 --  3. This notice may not be removed or altered from any source distribution.
-*/
 
-#pragma once
+baseName = path.getbasename(os.getcwd());
 
-#include "raylib.h"
+project (baseName)
+    kind "ConsoleApp"
+    location "./"
+    targetdir "../bin/%{cfg.buildcfg}"
 
-#include "voxel_lib.h"
+    filter "configurations:Release"
+        kind "WindowedApp"
+        entrypoint "mainCRTStartup"
 
-class CubeGeometryBuilder
-{
-public:
-    // setup the builder with the mesh it is going to fill out
-    CubeGeometryBuilder(Mesh& mesh);
+    filter "action:vs*"
+        debugdir "$(SolutionDir)"
 
-    // we need to know how many triangles are going to be in the mesh before we start
-    // this way we can allocate the correct buffer sizes for the mesh
-    void Allocate(int triangles);
+    filter {"action:vs*", "configurations:Release"}
+            kind "WindowedApp"
+            entrypoint "mainCRTStartup"
+    filter {}
 
-    void SetNormal(Vector3& value);
-    void SetNormal(float x, float y, float z);
-    void SetSetUV(Vector2& value);
-    void SetSetUV(float x, float y);
+    vpaths 
+    {
+        ["Header Files/*"] = { "include/**.h",  "include/**.hpp", "src/**.h", "src/**.hpp", "**.h", "**.hpp"},
+        ["Source Files/*"] = {"src/**.c", "src/**.cpp","**.c", "**.cpp"},
+    }
+    files {"**.c", "**.cpp", "**.h", "**.hpp"}
 
-    void PushVertex(Vector3& vertex, float xOffset = 0, float yOffset = 0, float zOffset = 0);
+    includedirs { "./" }
+    includedirs { "src" }
+    includedirs { "include" }
 
-    void AddCube(Vector3&& position, bool faces[6], Voxels::BlockType block);
+    link_raylib()
 
-protected:
-    Mesh& MeshRef;
-
-    size_t TriangleIndex = 0;
-    size_t VertIndex = 0;
-
-    Vector3 Normal;
-    Color VertColor;
-    Vector2 UV;
-};
+-- To link to a lib use link_to("LIB_FOLDER_NAME")

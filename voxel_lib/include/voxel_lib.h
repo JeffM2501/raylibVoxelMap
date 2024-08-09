@@ -20,4 +20,76 @@
 
 #pragma once
 
-void LibFunction();
+#include <stdint.h>
+#include <unordered_map>
+
+#include "raylib.h"
+
+namespace Voxels
+{
+    using BlockType = uint8_t;
+    static constexpr BlockType InvalidBlock = BlockType(-1);
+
+    // indexes for the 6 faces of a cube
+    static constexpr int SouthFace = 0;
+    static constexpr int NorthFace = 1;
+    static constexpr int WestFace = 2;
+    static constexpr int EastFace = 3;
+    static constexpr int UpFace = 4;
+    static constexpr int DownFace = 5;
+
+    struct BlockInfo
+    {
+        Rectangle FaceUVs[6] = { 0 };
+        BlockType BlockID = InvalidBlock;
+        bool Solid = true;
+    };
+
+    extern std::unordered_map<BlockType, BlockInfo> BlockInfos;
+
+    void SetBlockInfo(BlockType blockId, Rectangle& blockSides, bool solid = true);
+    void SetBlockInfo(BlockType blockId, Rectangle& blockSides, Rectangle& blockTop, bool solid = true);
+    void SetBlockInfo(BlockType blockId, Rectangle& blockSides, Rectangle& blockTop, Rectangle& blockBottom, bool solid = true);
+
+    struct ChunkCoordinate
+    {
+        int32_t h;
+        int32_t v;
+    };
+
+    union ChunkId
+    {
+        ChunkCoordinate Coordinate;
+        uint64_t Id = 0;
+    };
+
+    class Chunk
+    {
+    public:
+        static constexpr size_t ChunkSize = 16;
+        static constexpr size_t ChunkHeight = 64;
+
+        ChunkId Id;
+
+        BlockType GetVoxel(int h, int v, int d);
+        void SetVoxel(int h, int v, int d, BlockType block);
+
+        bool BlockIsSolid(int h, int v, int d);
+
+        Mesh ChunkMesh;
+
+    private:
+        BlockType Blocks[ChunkSize * ChunkSize * ChunkHeight] = { 0 };
+    };
+
+    class World
+    {
+    public:
+        std::unordered_map<uint64_t, Chunk> Chunks;
+
+        Chunk& AddChunk(int32_t h, int32_t v);
+
+        BlockType GetVoxel(ChunkId chunk, int h, int v, int d);
+        bool BlockIsSolid(ChunkId chunk, int h, int v, int d);
+    };
+}
