@@ -22,6 +22,8 @@
 
 #include <stdint.h>
 #include <unordered_map>
+#include <mutex>
+#include <functional>
 
 #include "raylib.h"
 
@@ -63,6 +65,14 @@ namespace Voxels
         uint64_t Id = 0;
     };
 
+    enum class ChunkStatus
+    {
+        Empty,
+        Generated,
+        Meshed,
+        Useable,
+    };
+
     class Chunk
     {
     public:
@@ -78,18 +88,32 @@ namespace Voxels
 
         Mesh ChunkMesh;
 
+        ChunkStatus GetStatus() const;
+        void SetStatus(ChunkStatus status);
+
     private:
         BlockType Blocks[ChunkSize * ChunkSize * ChunkHeight] = { 0 };
+
+        mutable std::mutex StatusLock;
+        ChunkStatus Status = ChunkStatus::Empty;
     };
 
     class World
     {
     public:
-        std::unordered_map<uint64_t, Chunk> Chunks;
-
         Chunk& AddChunk(int32_t h, int32_t v);
+
+        Chunk* GetChunk(int32_t h, int32_t v);
+        Chunk* GetChunk(ChunkId id);
+
+        bool SurroundingChunksGenerated(ChunkId id) const;
 
         BlockType GetVoxel(ChunkId chunk, int h, int v, int d);
         bool BlockIsSolid(ChunkId chunk, int h, int v, int d);
+
+    private:
+        mutable std::mutex ChunkLock;
+        std::unordered_map<uint64_t, Chunk> Chunks;
+
     };
 }

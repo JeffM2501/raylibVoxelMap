@@ -62,9 +62,21 @@ namespace Voxels
     {
         BlockType block = GetVoxel(h, v, d);
         if (block == InvalidBlock)
-            return false;
+            return true;
 
         return BlockInfos[block].Solid;
+    }
+
+    Voxels::ChunkStatus Chunk::GetStatus() const
+    {
+        std::lock_guard<std::mutex> lock(StatusLock);
+        return Status;
+    }
+
+    void Chunk::SetStatus(ChunkStatus status)
+    {
+        std::lock_guard<std::mutex> lock(StatusLock);
+        Status = status;
     }
 
     Chunk& World::AddChunk(int32_t h, int32_t v)
@@ -73,10 +85,49 @@ namespace Voxels
         id.Coordinate.h = h;
         id.Coordinate.v = v;
 
+        std::lock_guard <std::mutex> lock(ChunkLock);
         // todo, get the ref on insert
         Chunks.try_emplace(id.Id).second;
         Chunks[id.Id].Id = id;
         return Chunks[id.Id];
+    }
+
+    Voxels::Chunk* World::GetChunk(int32_t h, int32_t v)
+    {
+        ChunkId id;
+        id.Coordinate.h = h;
+        id.Coordinate.v = v;
+        return GetChunk(id);
+    }
+
+    Voxels::Chunk* World::GetChunk(ChunkId id)
+    {
+        std::lock_guard <std::mutex> lock(ChunkLock);
+
+        auto itr = Chunks.find(id.Id);
+        if (itr == Chunks.end())
+            return nullptr;
+
+        return &(itr->second);
+    }
+
+    bool World::SurroundingChunksGenerated(ChunkId id) const
+    {
+        std::lock_guard <std::mutex> lock(ChunkLock);
+
+        for (int h = -1; h <= 1; h++)
+        {
+            for (int v = -1; v <= 1; v++)
+            {
+                if (h == 0 && v == 0)
+                    continue;
+
+                auto itr = Chunks.find(id.Id);
+                if (itr == Chunks.end() && itr->second.GetStatus() == ChunkStatus::Empty)
+                    return false;
+            }
+        }
+        return true;
     }
 
     BlockType World::GetVoxel(ChunkId chunk, int h, int v, int d)
@@ -108,19 +159,18 @@ namespace Voxels
             v -= Chunk::ChunkSize;
         }
 
-        auto itr = Chunks.find(chunk.Id);
-        if (itr == Chunks.end())
+        Chunk* chunkData = GetChunk(chunk);
+        if (!chunkData)
             return InvalidBlock;
 
-        return itr->second.GetVoxel(h, v, d);
-
+        return chunkData->GetVoxel(h, v, d);
     }
 
     bool World::BlockIsSolid(ChunkId chunk, int h, int v, int d)
     {
         BlockType block = GetVoxel(chunk, h, v, d);
         if (block == InvalidBlock)
-            return false;
+            return true;
 
         return BlockInfos[block].Solid;
     }

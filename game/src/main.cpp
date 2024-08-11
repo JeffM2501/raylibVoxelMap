@@ -35,6 +35,7 @@ For a C++ project simply rename the file to .cpp and run premake
 
 #include "voxel_lib.h"
 #include "chunk_mesher.h"
+#include "world_builder.h"
 
 #include "external/stb_perlin.h"
 
@@ -50,6 +51,44 @@ Texture2D BlockTexture = { 0 };
 
 World   Map;
 
+std::vector<ChunkId> UseableChunks;
+
+void ChunkGenerationFunction(Chunk& chunk)
+{
+    int32_t chunkH = chunk.Id.Coordinate.h;
+    int32_t chunkV = chunk.Id.Coordinate.v;
+
+    for (int v = 0; v < Chunk::ChunkSize; v++)
+    {
+        for (int h = 0; h < Chunk::ChunkSize; h++)
+        {
+            float hvScale = 0.02f;
+
+            int64_t worldH = (h + (chunkH * Chunk::ChunkSize));
+            int64_t worldV = (v + (chunkV * Chunk::ChunkSize));
+
+            int depthLimit = 8 + int((stb_perlin_fbm_noise3(worldH * hvScale, worldV * hvScale, 1.0f, 2.0f, 0.5f, 6) + 1) * 0.5f * 16);
+
+            for (int d = 0; d < depthLimit; d++)
+            {
+                if (d == 0)
+                    chunk.SetVoxel(h, v, d, Bedrock);
+                else if (d < 4)
+                    chunk.SetVoxel(h, v, d, Stone);
+                else if (d == depthLimit - 1)
+                    chunk.SetVoxel(h, v, d, Grass);
+                else
+                    chunk.SetVoxel(h, v, d, Dirt);
+            }
+        }
+    }
+
+    chunk.SetStatus(ChunkStatus::Generated);
+}
+
+WorldBuilder Builder(Map, ChunkGenerationFunction);
+
+
 void SetupBlocks()
 {
     BlockTexture = LoadTexture("blockmap.png");
@@ -63,47 +102,38 @@ void SetupBlocks()
     SetBlockInfo(Stone, Rectangle{ blockWidth * 3,0,blockWidth * 4,blockHeight });
     SetBlockInfo(Bedrock, Rectangle{ blockWidth * 4,0,blockWidth * 5,blockHeight });
 
-
     constexpr int chunkCount = 5;
 
-    for (int chunkH = -chunkCount; chunkH < chunkCount; chunkH++)
+    ChunkId id;
+    for (id.Coordinate.h = -chunkCount; id.Coordinate.h < chunkCount; id.Coordinate.h++)
     {
-        for (int chunkV = -chunkCount; chunkV < chunkCount; chunkV++)
+        for (id.Coordinate.v = -chunkCount; id.Coordinate.v < chunkCount; id.Coordinate.v++)
         {
-            Chunk& TestChunk = Map.AddChunk(chunkH, chunkV);
-
-            for (int v = 0; v < Chunk::ChunkSize; v++)
-            {
-                for (int h = 0; h < Chunk::ChunkSize; h++)
-                {
-                    float hvScale = 0.02f;
-
-                    int64_t worldH = (h + (chunkH * Chunk::ChunkSize));
-                    int64_t worldV = (v + (chunkV * Chunk::ChunkSize));
-
-                    int depthLimit = 8 + int((stb_perlin_fbm_noise3(worldH * hvScale, worldV * hvScale, 1.0f, 2.0f, 0.5f, 6) + 1) * 0.5f * 16);
-
-                    for (int d = 0; d < depthLimit; d++)
-                    {
-                        if (d == 0)
-                            TestChunk.SetVoxel(h, v, d, Bedrock);
-                        else if (d < 4)
-                            TestChunk.SetVoxel(h, v, d, Stone);
-                        else if (d == depthLimit - 1)
-                            TestChunk.SetVoxel(h, v, d, Grass);
-                        else
-                            TestChunk.SetVoxel(h, v, d, Dirt);
-                    }
-                }
-            }
-
-            ChunkMesher mesher(Map, TestChunk.Id);
-            mesher.BuildMesh();
-
-            TestChunk.ChunkMesh = mesher.GetMesh();
-            UploadMesh(&TestChunk.ChunkMesh, false);
+            Builder.PushChunk(id);
         }
     }
+}
+
+void MeshChunk()
+{
+    ChunkId id;
+    if (!Builder.PopChunk(&id))
+        return;
+
+    Chunk* chunk = Map.GetChunk(id);
+
+    if (!chunk)
+        return;
+    
+    ChunkMesher mesher(Map, chunk->Id);
+    mesher.BuildMesh();
+    chunk->SetStatus(ChunkStatus::Meshed);
+
+    chunk->ChunkMesh = mesher.GetMesh();
+    UploadMesh(&chunk->ChunkMesh, false);
+    chunk->SetStatus(ChunkStatus::Useable);
+
+    UseableChunks.push_back(id);
 }
 
 int main()
@@ -137,6 +167,9 @@ int main()
     // game loop
     while (!WindowShouldClose())
     {
+        MeshChunk();
+
+        double startTime = GetTime();
         if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
         {
             constexpr float mouseFactor = 0.1f;
@@ -161,7 +194,6 @@ int main()
         if (IsKeyDown(KEY_Q))
             CameraTransform.MoveV(-speed);
 
-       
         // drawing
         BeginDrawing();
         ClearBackground(DARKGRAY);
@@ -173,9 +205,13 @@ int main()
         DrawGrid(100, 1);
         rlDrawRenderBatchActive();
 
-        for (const auto& [id, chunk] : Map.Chunks)
+        for (auto id : UseableChunks)
         {
-            DrawMesh(chunk.ChunkMesh, cubeMat, MatrixTranslate(chunk.Id.Coordinate.h * float(Chunk::ChunkSize), 0, chunk.Id.Coordinate.v * float(Chunk::ChunkSize)));
+            Chunk* chunk = Map.GetChunk(id);
+            if (!chunk || chunk->GetStatus() != ChunkStatus::Useable)
+                continue;
+
+            DrawMesh(chunk->ChunkMesh, cubeMat, MatrixTranslate(id.Coordinate.h * float(Chunk::ChunkSize), 0, id.Coordinate.v * float(Chunk::ChunkSize)));
         }
 
         rlDisableDepthTest();
@@ -187,7 +223,6 @@ int main()
 
         EndMode3D();
         DrawFPS(0, 0);
-
         EndDrawing();
     }
 
