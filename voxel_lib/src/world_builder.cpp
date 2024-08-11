@@ -22,7 +22,7 @@ namespace Voxels
     {
         {
             std::lock_guard guard(QueueMutex);
-            PendingChunks.push_front(chunk);
+            PendingChunks.push_back(chunk);
         }
         StartQueue();
     }
@@ -33,8 +33,8 @@ namespace Voxels
         if (CompletedChunks.empty() || !chunk)
             return false;
 
-        *chunk = CompletedChunks.back();
-        CompletedChunks.pop_back();
+        *chunk = CompletedChunks.front();
+        CompletedChunks.pop_front();
         return true;
     }
 
@@ -54,8 +54,8 @@ namespace Voxels
         if (PendingChunks.empty() || !chunk)
             return false;
 
-        *chunk = PendingChunks.back();
-        PendingChunks.pop_back();
+        *chunk = PendingChunks.front();
+        PendingChunks.pop_front();
         return true;
     }
 

@@ -37,6 +37,7 @@ For a C++ project simply rename the file to .cpp and run premake
 #include "chunk_mesher.h"
 #include "world_builder.h"
 
+
 #include "external/stb_perlin.h"
 
 using namespace Voxels;
@@ -87,11 +88,13 @@ void ChunkGenerationFunction(Chunk& chunk)
 }
 
 WorldBuilder Builder(Map, ChunkGenerationFunction);
-
+ChunkMeshTaskPool Mesher(Map);
 
 void SetupBlocks()
 {
     BlockTexture = LoadTexture("blockmap.png");
+    GenTextureMipmaps(&BlockTexture);
+    SetTextureFilter(BlockTexture, TEXTURE_FILTER_ANISOTROPIC_16X);
 
     float blockWidth = 1.0f/8.0f;
     float blockHeight = 1;
@@ -117,23 +120,51 @@ void SetupBlocks()
 void MeshChunk()
 {
     ChunkId id;
-    if (!Builder.PopChunk(&id))
+    while (Builder.PopChunk(&id))
+    {
+        Mesher.PushChunk(id);
+    }
+
+    if (!Mesher.PopChunk(&id))
         return;
 
     Chunk* chunk = Map.GetChunk(id);
 
     if (!chunk)
         return;
-    
-    ChunkMesher mesher(Map, chunk->Id);
-    mesher.BuildMesh();
-    chunk->SetStatus(ChunkStatus::Meshed);
 
-    chunk->ChunkMesh = mesher.GetMesh();
     UploadMesh(&chunk->ChunkMesh, false);
     chunk->SetStatus(ChunkStatus::Useable);
 
     UseableChunks.push_back(id);
+}
+
+void MoveCamera(ObjectTransform& transform)
+{
+    double startTime = GetTime();
+    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+    {
+        constexpr float mouseFactor = 0.1f;
+        transform.RotateY(GetMouseDelta().x * -mouseFactor);
+        transform.RotateH(GetMouseDelta().y * -mouseFactor);
+    }
+
+    float speed = 10 * GetFrameTime();
+    if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))
+        speed *= 5;
+
+    if (IsKeyDown(KEY_W))
+        transform.MoveD(speed);
+    if (IsKeyDown(KEY_S))
+        transform.MoveD(-speed);
+    if (IsKeyDown(KEY_A))
+        transform.MoveH(speed);
+    if (IsKeyDown(KEY_D))
+        transform.MoveH(-speed);
+    if (IsKeyDown(KEY_E))
+        transform.MoveV(speed);
+    if (IsKeyDown(KEY_Q))
+        transform.MoveV(-speed);
 }
 
 int main()
@@ -169,30 +200,7 @@ int main()
     {
         MeshChunk();
 
-        double startTime = GetTime();
-        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
-        {
-            constexpr float mouseFactor = 0.1f;
-            CameraTransform.RotateY(GetMouseDelta().x * -mouseFactor);
-            CameraTransform.RotateH(GetMouseDelta().y * -mouseFactor);
-        }
-
-        float speed = 10 * GetFrameTime();
-        if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))
-            speed *= 5;
-
-        if (IsKeyDown(KEY_W))
-            CameraTransform.MoveD(speed);
-        if (IsKeyDown(KEY_S))
-            CameraTransform.MoveD(-speed);
-        if (IsKeyDown(KEY_A))
-            CameraTransform.MoveH(speed);
-        if (IsKeyDown(KEY_D))
-            CameraTransform.MoveH(-speed);
-        if (IsKeyDown(KEY_E))
-            CameraTransform.MoveV(speed);
-        if (IsKeyDown(KEY_Q))
-            CameraTransform.MoveV(-speed);
+        MoveCamera(CameraTransform);
 
         // drawing
         BeginDrawing();
@@ -201,9 +209,6 @@ int main()
         CameraTransform.SetCamera(ViewCamera);
         Lights::UpdateLights(ViewCamera);
         BeginMode3D(ViewCamera);
-
-        DrawGrid(100, 1);
-        rlDrawRenderBatchActive();
 
         for (auto id : UseableChunks)
         {
@@ -214,6 +219,7 @@ int main()
             DrawMesh(chunk->ChunkMesh, cubeMat, MatrixTranslate(id.Coordinate.h * float(Chunk::ChunkSize), 0, id.Coordinate.v * float(Chunk::ChunkSize)));
         }
 
+        rlDrawRenderBatchActive();
         rlDisableDepthTest();
         DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 10,0,0 }, RED);
         DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,5,0 }, GREEN);

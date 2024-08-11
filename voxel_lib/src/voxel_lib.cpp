@@ -123,7 +123,7 @@ namespace Voxels
                     continue;
 
                 auto itr = Chunks.find(id.Id);
-                if (itr == Chunks.end() && itr->second.GetStatus() == ChunkStatus::Empty)
+                if (itr == Chunks.end() || itr->second.GetStatus() == ChunkStatus::Empty)
                     return false;
             }
         }

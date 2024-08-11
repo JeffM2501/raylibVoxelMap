@@ -109,4 +109,111 @@ namespace Voxels
         std::lock_guard guard(StatusLock);
         BuildStatus = status;
     }
+
+    ChunkMeshTaskPool::ChunkMeshTaskPool(World& world)
+        : Map(world)
+    {
+
+    }
+
+    ChunkMeshTaskPool::~ChunkMeshTaskPool()
+    {
+        {
+            std::lock_guard guard(RunMutex);
+            RunQueue = false;
+        }
+        if (WorkerThread.joinable())
+            WorkerThread.join();
+    }
+
+    void ChunkMeshTaskPool::PushChunk(ChunkId chunk)
+    {
+        {
+            std::lock_guard guard(QueueMutex);
+            PendingChunks.push_back(chunk);
+        }
+        StartQueue();
+    }
+
+    bool ChunkMeshTaskPool::PopChunk(ChunkId* chunk)
+    {
+        std::lock_guard guard(QueueMutex);
+        if (CompletedChunks.empty() || !chunk)
+            return false;
+
+        *chunk = CompletedChunks.front();
+        CompletedChunks.pop_front();
+        return true;
+    }
+
+    void ChunkMeshTaskPool::StartQueue()
+    {
+        if (WorkerThread.joinable())
+            return;
+
+        std::lock_guard guard(RunMutex);
+        RunQueue = true;
+        WorkerThread = std::thread([this]() {ProcessQueue(); });
+    }
+
+    void ChunkMeshTaskPool::ProcessQueue()
+    {
+        bool run = true;
+
+        while (run)
+        {
+            {
+                std::lock_guard guard(RunMutex);
+                if (!RunQueue)
+                {
+                    RunQueue = false;
+                    return;
+                }
+            }
+
+            ChunkId processChunk;
+
+            if (!PopPendingChunk(&processChunk))
+            {
+                StopQueue();
+                return;
+            }
+
+            ChunkMesher mesher(Map, processChunk);
+            mesher.BuildMesh();
+
+            Chunk * chunk = Map.GetChunk(processChunk);
+
+            chunk->ChunkMesh = mesher.GetMesh();
+            chunk->SetStatus(ChunkStatus::Meshed);
+
+            std::lock_guard outBoundGuard(QueueMutex);
+            CompletedChunks.push_back(processChunk);
+        }
+    }
+
+    bool ChunkMeshTaskPool::PopPendingChunk(ChunkId* chunk)
+    {
+        std::lock_guard guard(QueueMutex);
+        if (PendingChunks.empty() || !chunk)
+            return false;
+
+        for (auto itr = PendingChunks.begin(); itr != PendingChunks.end(); itr++)
+        {
+            if (Map.SurroundingChunksGenerated(*itr))
+            {
+                *chunk = *itr;
+                PendingChunks.erase(itr);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void ChunkMeshTaskPool::StopQueue()
+    {
+        std::lock_guard guard(RunMutex);
+        RunQueue = false;
+    }
+
 }
