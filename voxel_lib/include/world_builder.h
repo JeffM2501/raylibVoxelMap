@@ -16,6 +16,8 @@ namespace Voxels
 
         ~WorldBuilder();
 
+        void Abort();
+
         void PushChunk(ChunkId chunk);
 
         bool PopChunk(ChunkId* chunk);

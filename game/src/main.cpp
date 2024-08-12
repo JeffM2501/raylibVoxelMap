@@ -37,55 +37,21 @@ For a C++ project simply rename the file to .cpp and run premake
 #include "chunk_mesher.h"
 #include "world_builder.h"
 
-
+#include "world_def.h"
 #include "external/stb_perlin.h"
 
-using namespace Voxels;
+#include <set>
 
-constexpr BlockType Air = 0;
-constexpr BlockType Grass = 1;
-constexpr BlockType Dirt = 2;
-constexpr BlockType Stone = 3;
-constexpr BlockType Bedrock = 4;
+using namespace Voxels;
 
 Texture2D BlockTexture = { 0 };
 
 World   Map;
 
 std::vector<ChunkId> UseableChunks;
+std::vector<ChunkId> GeneratedChunks;
 
-void ChunkGenerationFunction(Chunk& chunk)
-{
-    int32_t chunkH = chunk.Id.Coordinate.h;
-    int32_t chunkV = chunk.Id.Coordinate.v;
-
-    for (int v = 0; v < Chunk::ChunkSize; v++)
-    {
-        for (int h = 0; h < Chunk::ChunkSize; h++)
-        {
-            float hvScale = 0.02f;
-
-            int64_t worldH = (h + (chunkH * Chunk::ChunkSize));
-            int64_t worldV = (v + (chunkV * Chunk::ChunkSize));
-
-            int depthLimit = 8 + int((stb_perlin_fbm_noise3(worldH * hvScale, worldV * hvScale, 1.0f, 2.0f, 0.5f, 6) + 1) * 0.5f * 16);
-
-            for (int d = 0; d < depthLimit; d++)
-            {
-                if (d == 0)
-                    chunk.SetVoxel(h, v, d, Bedrock);
-                else if (d < 4)
-                    chunk.SetVoxel(h, v, d, Stone);
-                else if (d == depthLimit - 1)
-                    chunk.SetVoxel(h, v, d, Grass);
-                else
-                    chunk.SetVoxel(h, v, d, Dirt);
-            }
-        }
-    }
-
-    chunk.SetStatus(ChunkStatus::Generated);
-}
+std::set<uint64_t> RequestedChunks;
 
 WorldBuilder Builder(Map, ChunkGenerationFunction);
 ChunkMeshTaskPool Mesher(Map);
@@ -96,22 +62,16 @@ void SetupBlocks()
     GenTextureMipmaps(&BlockTexture);
     SetTextureFilter(BlockTexture, TEXTURE_FILTER_ANISOTROPIC_16X);
 
-    float blockWidth = 1.0f/8.0f;
-    float blockHeight = 1;
+    SetupWorldData(BlockTexture);
 
-    SetBlockInfo(Air, Rectangle{ 0,0,0,0 }, false);
-    SetBlockInfo(Grass, Rectangle{ blockWidth * 2,0,blockWidth * 3,blockHeight }, Rectangle{ 0,0,blockWidth,blockHeight }, Rectangle{ blockWidth,0,blockWidth*2,blockHeight });
-    SetBlockInfo(Dirt, Rectangle{ blockWidth,0,blockWidth*2,blockHeight });
-    SetBlockInfo(Stone, Rectangle{ blockWidth * 3,0,blockWidth * 4,blockHeight });
-    SetBlockInfo(Bedrock, Rectangle{ blockWidth * 4,0,blockWidth * 5,blockHeight });
-
-    constexpr int chunkCount = 5;
+    constexpr int chunkCount = 8;
 
     ChunkId id;
-    for (id.Coordinate.h = -chunkCount; id.Coordinate.h < chunkCount; id.Coordinate.h++)
+    for (id.Coordinate.h = -chunkCount; id.Coordinate.h <= chunkCount; id.Coordinate.h++)
     {
-        for (id.Coordinate.v = -chunkCount; id.Coordinate.v < chunkCount; id.Coordinate.v++)
+        for (id.Coordinate.v = -chunkCount; id.Coordinate.v <= chunkCount; id.Coordinate.v++)
         {
+            RequestedChunks.insert(id.Id);
             Builder.PushChunk(id);
         }
     }
@@ -122,21 +82,31 @@ void MeshChunk()
     ChunkId id;
     while (Builder.PopChunk(&id))
     {
+        auto itr = RequestedChunks.find(id.Id);
+        if (itr != RequestedChunks.end())
+            RequestedChunks.erase(itr);
+
+        GeneratedChunks.push_back(id);
         Mesher.PushChunk(id);
     }
 
-    if (!Mesher.PopChunk(&id))
-        return;
+    int loadLimit = 3;
 
-    Chunk* chunk = Map.GetChunk(id);
+    for (int i = 0; i < loadLimit; i++)
+    {
+        if (!Mesher.PopChunk(&id))
+            return;
 
-    if (!chunk)
-        return;
+        Chunk* chunk = Map.GetChunk(id);
 
-    UploadMesh(&chunk->ChunkMesh, false);
-    chunk->SetStatus(ChunkStatus::Useable);
+        if (!chunk)
+            continue;
 
-    UseableChunks.push_back(id);
+        UploadMesh(&chunk->ChunkMesh, false);
+        chunk->SetStatus(ChunkStatus::Useable);
+
+        UseableChunks.push_back(id);
+    }
 }
 
 void MoveCamera(ObjectTransform& transform)
@@ -167,12 +137,26 @@ void MoveCamera(ObjectTransform& transform)
         transform.MoveV(-speed);
 }
 
+void UnloadMeshes()
+{
+    for (auto id : UseableChunks)
+    {
+        Chunk* chunk = Map.GetChunk(id);
+        if (!chunk || chunk->GetStatus() != ChunkStatus::Useable)
+            continue;
+
+        UnloadMesh(chunk->ChunkMesh);
+        chunk->ChunkMesh.vaoId = 0;
+        chunk->SetStatus(ChunkStatus::Generated);
+    }
+}
+
 int main()
 {
     SearchAndSetResourceDir("resources");
 
     // set up the window
-    SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 800, "Voxels");
     SetTargetFPS(500);
 
@@ -184,7 +168,8 @@ int main()
     ViewCamera.fovy = 45;
     ObjectTransform CameraTransform(false);
 
-    CameraTransform.SetPosition(0, Chunk::ChunkHeight * 0.25f, -10);
+    CameraTransform.SetPosition(0, Chunk::ChunkHeight * 0.45f, -10);
+    CameraTransform.RotateY(-45);
     CameraTransform.SetCamera(ViewCamera);
 
     Material cubeMat = LoadMaterialDefault();
@@ -198,39 +183,84 @@ int main()
     // game loop
     while (!WindowShouldClose())
     {
-        MeshChunk();
-
         MoveCamera(CameraTransform);
+
+        ChunkId currentChunk;
+        currentChunk.Coordinate.h = CameraTransform.GetPosition().x / float(Chunk::ChunkSize);
+        currentChunk.Coordinate.v = CameraTransform.GetPosition().z / float(Chunk::ChunkSize);
+
+        auto* thisChunk = Map.GetChunk(currentChunk);
+        if (thisChunk == nullptr)
+        {
+            if (RequestedChunks.find(currentChunk.Id) == RequestedChunks.end())
+            {
+                ChunkId newChunk = currentChunk;
+
+                for (newChunk.Coordinate.h = currentChunk.Coordinate.h-1; newChunk.Coordinate.h <= currentChunk.Coordinate.h+1; newChunk.Coordinate.h++)
+                {
+                    for (newChunk.Coordinate.v = currentChunk.Coordinate.v - 1; newChunk.Coordinate.v <= currentChunk.Coordinate.v+1; newChunk.Coordinate.v++)
+                    {
+                        if (RequestedChunks.find(newChunk.Id) == RequestedChunks.end() && Map.GetChunk(newChunk) == nullptr)
+                        {
+                            RequestedChunks.insert(newChunk.Id);
+                            Builder.PushChunk(newChunk);
+                        }
+                    }
+                }
+                
+            }
+        }
+
+        MeshChunk();    
 
         // drawing
         BeginDrawing();
-        ClearBackground(DARKGRAY);
+        ClearBackground(SKYBLUE);
 
         CameraTransform.SetCamera(ViewCamera);
         Lights::UpdateLights(ViewCamera);
         BeginMode3D(ViewCamera);
 
-        for (auto id : UseableChunks)
+        for (auto id : GeneratedChunks)
         {
             Chunk* chunk = Map.GetChunk(id);
-            if (!chunk || chunk->GetStatus() != ChunkStatus::Useable)
+            if (!chunk)
                 continue;
 
-            DrawMesh(chunk->ChunkMesh, cubeMat, MatrixTranslate(id.Coordinate.h * float(Chunk::ChunkSize), 0, id.Coordinate.v * float(Chunk::ChunkSize)));
+            if (chunk->GetStatus() == ChunkStatus::Useable)
+            {
+                DrawMesh(chunk->ChunkMesh, cubeMat, MatrixTranslate(id.Coordinate.h * float(Chunk::ChunkSize), 0, id.Coordinate.v * float(Chunk::ChunkSize)));
+            }
+            else
+            {
+                Vector3 center = { id.Coordinate.h * float(Chunk::ChunkSize) + float(Chunk::ChunkSize) * 0.5f,
+                                   float(Chunk::ChunkHeight) * 0.5f,
+                                   id.Coordinate.v * float(Chunk::ChunkSize) + float(Chunk::ChunkSize) * 0.5f };
+
+                DrawCubeWires(center, Chunk::ChunkSize-1, Chunk::ChunkHeight, Chunk::ChunkSize-1,RED);
+
+            }
         }
 
-        rlDrawRenderBatchActive();
-        rlDisableDepthTest();
-        DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 10,0,0 }, RED);
-        DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,5,0 }, GREEN);
-        DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,0,10 }, BLUE);
-        rlDrawRenderBatchActive();
-        rlEnableDepthTest();
+         rlDrawRenderBatchActive();
+         rlDisableDepthTest();
+         DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 10,0,0 }, RED);
+         DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,5,0 }, GREEN);
+         DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,0,10 }, BLUE);
+         rlDrawRenderBatchActive();
+         rlEnableDepthTest();
 
         EndMode3D();
         DrawFPS(0, 0);
         EndDrawing();
     }
+
+    Mesher.Abort();
+    Builder.Abort();
+
+    UnloadMeshes();
+
+    UnloadTexture(BlockTexture);
 
     // cleanup
     CloseWindow();

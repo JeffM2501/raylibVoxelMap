@@ -48,6 +48,8 @@ namespace Voxels
         ChunkMeshTaskPool(World& world);
         ~ChunkMeshTaskPool();
 
+        void Abort();
+
         void PushChunk(ChunkId chunk);
         bool PopChunk(ChunkId* chunk);
     
@@ -56,6 +58,7 @@ namespace Voxels
         void ProcessQueue();
 
         bool PopPendingChunk(ChunkId* chunk);
+        bool PendingChunksEmpty();
 
         void StopQueue();
 

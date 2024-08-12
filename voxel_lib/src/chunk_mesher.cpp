@@ -118,6 +118,11 @@ namespace Voxels
 
     ChunkMeshTaskPool::~ChunkMeshTaskPool()
     {
+        Abort();
+    }
+
+    void ChunkMeshTaskPool::Abort()
+    {
         {
             std::lock_guard guard(RunMutex);
             RunQueue = false;
@@ -148,12 +153,16 @@ namespace Voxels
 
     void ChunkMeshTaskPool::StartQueue()
     {
-        if (WorkerThread.joinable())
+        std::lock_guard guard(RunMutex);
+
+        if (RunQueue)
             return;
 
-        std::lock_guard guard(RunMutex);
+        if (WorkerThread.joinable())
+            WorkerThread.join();
+
         RunQueue = true;
-        WorkerThread = std::thread([this]() {ProcessQueue(); });
+        WorkerThread = std::thread([this]() { ProcessQueue(); });
     }
 
     void ChunkMeshTaskPool::ProcessQueue()
@@ -208,6 +217,12 @@ namespace Voxels
             }
         }
         return false;
+    }
+
+    bool ChunkMeshTaskPool::PendingChunksEmpty()
+    {
+        std::lock_guard guard(QueueMutex);
+        return PendingChunks.empty();
     }
 
     void ChunkMeshTaskPool::StopQueue()

@@ -2,6 +2,28 @@
 [WIP] Using chunks to show a voxel world
 
 
+# Method of operation
+This is an extension of the simple voxel mesher found in https://github.com/raylib-extras/examples-cpp/tree/main/voxel_mesher
+
+The app generates a simple world using a perlin noise map and meshes the voxels as needed in threads, and then uploads them to the GPU in the main thread.
+
+## Voxel_lib
+All the code for the voxel world is part of the voxel_lib library. It contains the voxel data, world chunks and meshing system, as well as threading systems to generate and mesh chunks async from the main thread.
+
+## Lighting_system
+This is a C++ version of rlights.h that supports attenuation and spotlights
+
+
+# TODO
+ * Visibility Grid
+ * Dynamic Mesh Load/Unload
+ * Floating Origin
+ * Skybox
+ * Water
+ * Better World Generation
+ * Trees
+
+
 # License
 Copyright (c) 2020-2024 Jeffery Myers
 

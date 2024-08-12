@@ -122,7 +122,11 @@ namespace Voxels
                 if (h == 0 && v == 0)
                     continue;
 
-                auto itr = Chunks.find(id.Id);
+                ChunkId siblingChunk;
+                siblingChunk.Coordinate.h = id.Coordinate.h + h;
+                siblingChunk.Coordinate.v = id.Coordinate.v + v;
+
+                auto itr = Chunks.find(siblingChunk.Id);
                 if (itr == Chunks.end() || itr->second.GetStatus() == ChunkStatus::Empty)
                     return false;
             }

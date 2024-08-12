@@ -77,7 +77,7 @@ namespace Voxels
     {
     public:
         static constexpr size_t ChunkSize = 16;
-        static constexpr size_t ChunkHeight = 64;
+        static constexpr size_t ChunkHeight = 32;
 
         ChunkId Id;
 
