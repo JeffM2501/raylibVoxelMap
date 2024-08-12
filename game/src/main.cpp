@@ -162,7 +162,18 @@ int main()
 
     SetupBlocks();
 
-    Lights::SetLightingShader(LoadShader("shaders/lighting.vert", "shaders/lighting.frag"));
+    auto shader = LoadShader("shaders/lighting.vert", "shaders/lighting.frag");
+
+    auto fogFactorLoc = GetShaderLocation(shader, "fogDensity");
+    auto fogColorLoc = GetShaderLocation(shader, "fogColor");
+
+    float factor = 0.005f;
+    SetShaderValue(shader, fogFactorLoc, &factor, SHADER_UNIFORM_FLOAT);
+
+    float fogColor[4] = { SKYBLUE.r / 255.0f,SKYBLUE.g / 255.0f,SKYBLUE.b / 255.0f, 0};
+    SetShaderValue(shader, fogColorLoc, fogColor, SHADER_UNIFORM_VEC4);
+
+    Lights::SetLightingShader(shader);
 
     Camera3D ViewCamera = { 0 };
     ViewCamera.fovy = 45;
@@ -227,8 +238,20 @@ int main()
             if (!chunk)
                 continue;
 
+            constexpr float fadeSpeed = 1.0f/ 0.5f;
+
             if (chunk->GetStatus() == ChunkStatus::Useable)
             {
+                float color[4] = { 1,1,1,1 };
+                if (chunk->Alpha < 1)
+                {
+                    chunk->Alpha += GetFrameTime() * fadeSpeed;
+                    if (chunk->Alpha > 1)
+                        chunk->Alpha = 1;
+                }
+
+                cubeMat.maps[MATERIAL_MAP_DIFFUSE].color.a = chunk->Alpha * 255;
+
                 DrawMesh(chunk->ChunkMesh, cubeMat, MatrixTranslate(id.Coordinate.h * float(Chunk::ChunkSize), 0, id.Coordinate.v * float(Chunk::ChunkSize)));
             }
             else

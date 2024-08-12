@@ -10,6 +10,9 @@ in vec3 fragNormal;
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 
+uniform vec4 fogColor;
+uniform float fogDensity;
+
 // Output fragment color
 out vec4 finalColor;
 
@@ -97,8 +100,25 @@ void main()
     }
 
     finalColor = (texelColor * ((colDiffuse + vec4(specular, 1.0)) * vec4(lightDot, 1.0)));
-    finalColor += texelColor * (ambient)*colDiffuse;
+    finalColor += texelColor * (ambient) * colDiffuse;
 
     // Gamma correction
     finalColor = pow(finalColor, vec4(1.0/2.2));
+    
+    finalColor.a = texelColor.a * colDiffuse.a;
+
+    // Fog calculation
+    if (fogDensity > 0 && fogColor.a > 0)
+    {
+     //   fogColor.a = finalColor.a;
+
+        float dist = length(viewPos - fragPosition);
+
+        // Exponential fog
+        float fogFactor = 1.0/exp((dist*fogDensity)*(dist*fogDensity));
+
+        fogFactor = clamp(fogFactor, 0.0, 1.0);
+
+        finalColor = mix(fogColor, finalColor, fogFactor);
+    }
 }

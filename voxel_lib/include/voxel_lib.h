@@ -91,6 +91,8 @@ namespace Voxels
         ChunkStatus GetStatus() const;
         void SetStatus(ChunkStatus status);
 
+        float Alpha = 0;
+
     private:
         BlockType Blocks[ChunkSize * ChunkSize * ChunkHeight] = { 0 };
 
