@@ -79,6 +79,18 @@ namespace Voxels
         Status = status;
     }
 
+    ChunkVisibilityRequirement Chunk::GetVisRequirement() const
+    {
+        std::lock_guard<std::mutex> lock(StatusLock);
+        return VisStatus;
+    }
+
+    void Chunk::SetVisRequirement(ChunkVisibilityRequirement status)
+    {
+        std::lock_guard<std::mutex> lock(StatusLock);
+        VisStatus = status;
+    }
+
     Chunk& World::AddChunk(int32_t h, int32_t v)
     {
         ChunkId id;

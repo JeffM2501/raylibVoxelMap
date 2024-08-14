@@ -62,22 +62,50 @@ namespace Voxels
     union ChunkId
     {
         ChunkCoordinate Coordinate;
-        uint64_t Id = 0;
+        uint64_t Id = uint64_t (-1);
+
+        ChunkId() {}
+
+        ChunkId(int32_t h, int32_t v)
+        {
+            Coordinate.h = h;
+            Coordinate.v = v;
+        }
+
+        ChunkId(uint64_t id)
+        {
+            Id = id;
+        }
+
+        bool IsValid() const
+        {
+            return Id != -1;
+        }
     };
 
     enum class ChunkStatus
     {
         Empty,
+        Generating,
         Generated,
+        Meshing,
         Meshed,
         Useable,
+    };
+
+    enum class ChunkVisibilityRequirement
+    {
+        Unknown,
+        NeedLoad,
+        NeedMesh,
+        NotNeeded,
     };
 
     class Chunk
     {
     public:
-        static constexpr size_t ChunkSize = 16;
-        static constexpr size_t ChunkHeight = 32;
+        static constexpr int ChunkSize = 16;
+        static constexpr int ChunkHeight = 32;
 
         ChunkId Id;
 
@@ -91,6 +119,9 @@ namespace Voxels
         ChunkStatus GetStatus() const;
         void SetStatus(ChunkStatus status);
 
+        ChunkVisibilityRequirement GetVisRequirement() const;
+        void SetVisRequirement(ChunkVisibilityRequirement status);
+
         float Alpha = 0;
 
     private:
@@ -98,6 +129,7 @@ namespace Voxels
 
         mutable std::mutex StatusLock;
         ChunkStatus Status = ChunkStatus::Empty;
+        ChunkVisibilityRequirement VisStatus = ChunkVisibilityRequirement::Unknown;
     };
 
     class World

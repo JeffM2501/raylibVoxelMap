@@ -2,10 +2,14 @@
 
 namespace Voxels
 {
-    WorldBuilder::WorldBuilder(World& world, std::function<void(Chunk&)> func)
+    WorldBuilder::WorldBuilder(World& world)
         : WorldMap(world)
-        , GenerationFunction(func)
     {
+    }
+
+    void WorldBuilder::SetGenerationFunction(std::function<void(Chunk&)> func)
+    {
+        GenerationFunction = func;
     }
 
     WorldBuilder::~WorldBuilder()
@@ -27,7 +31,14 @@ namespace Voxels
     {
         {
             std::lock_guard guard(QueueMutex);
+            
+            auto itr = ProcessingChunks.find(chunk.Id);
+            if (itr != ProcessingChunks.end())
+                return;
+
+            ProcessingChunks.insert(chunk.Id);
             PendingChunks.push_back(chunk);
+
         }
         StartQueue();
     }
@@ -65,6 +76,10 @@ namespace Voxels
 
         *chunk = PendingChunks.front();
         PendingChunks.pop_front();
+        auto pending = ProcessingChunks.find(chunk->Id);
+        if (pending != ProcessingChunks.end())
+            ProcessingChunks.erase(pending);
+
         return true;
     }
 
@@ -101,7 +116,9 @@ namespace Voxels
             if (chunk.GetStatus() != ChunkStatus::Empty)
                 continue;
 
+            chunk.SetStatus(ChunkStatus::Generating);
             GenerationFunction(chunk);
+            chunk.SetStatus(ChunkStatus::Generated);
 
             std::lock_guard outBoundGuard(QueueMutex);
             CompletedChunks.push_back(processChunk);

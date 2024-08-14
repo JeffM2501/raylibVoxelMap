@@ -37,6 +37,8 @@ For a C++ project simply rename the file to .cpp and run premake
 #include "chunk_mesher.h"
 #include "world_builder.h"
 
+#include "chunk_manager.h"
+
 #include "world_def.h"
 #include "external/stb_perlin.h"
 
@@ -48,13 +50,7 @@ Texture2D BlockTexture = { 0 };
 
 World   Map;
 
-std::vector<ChunkId> UseableChunks;
-std::vector<ChunkId> GeneratedChunks;
-
-std::set<uint64_t> RequestedChunks;
-
-WorldBuilder Builder(Map, ChunkGenerationFunction);
-ChunkMeshTaskPool Mesher(Map);
+ChunkManager Manager(Map);
 
 void SetupBlocks()
 {
@@ -64,49 +60,7 @@ void SetupBlocks()
 
     SetupWorldData(BlockTexture);
 
-    constexpr int chunkCount = 8;
-
-    ChunkId id;
-    for (id.Coordinate.h = -chunkCount; id.Coordinate.h <= chunkCount; id.Coordinate.h++)
-    {
-        for (id.Coordinate.v = -chunkCount; id.Coordinate.v <= chunkCount; id.Coordinate.v++)
-        {
-            RequestedChunks.insert(id.Id);
-            Builder.PushChunk(id);
-        }
-    }
-}
-
-void MeshChunk()
-{
-    ChunkId id;
-    while (Builder.PopChunk(&id))
-    {
-        auto itr = RequestedChunks.find(id.Id);
-        if (itr != RequestedChunks.end())
-            RequestedChunks.erase(itr);
-
-        GeneratedChunks.push_back(id);
-        Mesher.PushChunk(id);
-    }
-
-    int loadLimit = 3;
-
-    for (int i = 0; i < loadLimit; i++)
-    {
-        if (!Mesher.PopChunk(&id))
-            return;
-
-        Chunk* chunk = Map.GetChunk(id);
-
-        if (!chunk)
-            continue;
-
-        UploadMesh(&chunk->ChunkMesh, false);
-        chunk->SetStatus(ChunkStatus::Useable);
-
-        UseableChunks.push_back(id);
-    }
+    Manager.Builder.SetGenerationFunction(ChunkGenerationFunction);
 }
 
 void MoveCamera(ObjectTransform& transform)
@@ -139,16 +93,16 @@ void MoveCamera(ObjectTransform& transform)
 
 void UnloadMeshes()
 {
-    for (auto id : UseableChunks)
-    {
-        Chunk* chunk = Map.GetChunk(id);
-        if (!chunk || chunk->GetStatus() != ChunkStatus::Useable)
-            continue;
-
-        UnloadMesh(chunk->ChunkMesh);
-        chunk->ChunkMesh.vaoId = 0;
-        chunk->SetStatus(ChunkStatus::Generated);
-    }
+//     for (auto id : UseableChunks)
+//     {
+//         Chunk* chunk = Map.GetChunk(id);
+//         if (!chunk || chunk->GetStatus() != ChunkStatus::Useable)
+//             continue;
+// 
+//         UnloadMesh(chunk->ChunkMesh);
+//         chunk->ChunkMesh.vaoId = 0;
+//         chunk->SetStatus(ChunkStatus::Generated);
+//     }
 }
 
 int main()
@@ -196,34 +150,7 @@ int main()
     {
         MoveCamera(CameraTransform);
 
-        ChunkId currentChunk;
-        currentChunk.Coordinate.h = CameraTransform.GetPosition().x / float(Chunk::ChunkSize);
-        currentChunk.Coordinate.v = CameraTransform.GetPosition().z / float(Chunk::ChunkSize);
-
-        auto* thisChunk = Map.GetChunk(currentChunk);
-        if (thisChunk == nullptr)
-        {
-            if (RequestedChunks.find(currentChunk.Id) == RequestedChunks.end())
-            {
-                ChunkId newChunk = currentChunk;
-
-                for (newChunk.Coordinate.h = currentChunk.Coordinate.h-1; newChunk.Coordinate.h <= currentChunk.Coordinate.h+1; newChunk.Coordinate.h++)
-                {
-                    for (newChunk.Coordinate.v = currentChunk.Coordinate.v - 1; newChunk.Coordinate.v <= currentChunk.Coordinate.v+1; newChunk.Coordinate.v++)
-                    {
-                        if (RequestedChunks.find(newChunk.Id) == RequestedChunks.end() && Map.GetChunk(newChunk) == nullptr)
-                        {
-                            RequestedChunks.insert(newChunk.Id);
-                            Builder.PushChunk(newChunk);
-                        }
-                    }
-                }
-                
-            }
-        }
-
-        MeshChunk();    
-
+        Manager.Update(CameraTransform.GetPosition());
         // drawing
         BeginDrawing();
         ClearBackground(SKYBLUE);
@@ -232,16 +159,10 @@ int main()
         Lights::UpdateLights(ViewCamera);
         BeginMode3D(ViewCamera);
 
-        for (auto id : GeneratedChunks)
-        {
-            Chunk* chunk = Map.GetChunk(id);
-            if (!chunk)
-                continue;
+        Manager.DoForEachRenderChunk([&cubeMat](Chunk* chunk)
+            {                
+                constexpr float fadeSpeed = 1.0f/ 0.5f;
 
-            constexpr float fadeSpeed = 1.0f/ 0.5f;
-
-            if (chunk->GetStatus() == ChunkStatus::Useable)
-            {
                 float color[4] = { 1,1,1,1 };
                 if (chunk->Alpha < 1)
                 {
@@ -250,20 +171,10 @@ int main()
                         chunk->Alpha = 1;
                 }
 
-                cubeMat.maps[MATERIAL_MAP_DIFFUSE].color.a = chunk->Alpha * 255;
+                cubeMat.maps[MATERIAL_MAP_DIFFUSE].color.a = (unsigned char)(chunk->Alpha * 255);
 
-                DrawMesh(chunk->ChunkMesh, cubeMat, MatrixTranslate(id.Coordinate.h * float(Chunk::ChunkSize), 0, id.Coordinate.v * float(Chunk::ChunkSize)));
-            }
-            else
-            {
-                Vector3 center = { id.Coordinate.h * float(Chunk::ChunkSize) + float(Chunk::ChunkSize) * 0.5f,
-                                   float(Chunk::ChunkHeight) * 0.5f,
-                                   id.Coordinate.v * float(Chunk::ChunkSize) + float(Chunk::ChunkSize) * 0.5f };
-
-                DrawCubeWires(center, Chunk::ChunkSize-1, Chunk::ChunkHeight, Chunk::ChunkSize-1,RED);
-
-            }
-        }
+                DrawMesh(chunk->ChunkMesh, cubeMat, MatrixTranslate(chunk->Id.Coordinate.h * float(Chunk::ChunkSize), 0, chunk->Id.Coordinate.v * float(Chunk::ChunkSize)));
+            });
 
          rlDrawRenderBatchActive();
          rlDisableDepthTest();
@@ -273,13 +184,17 @@ int main()
          rlDrawRenderBatchActive();
          rlEnableDepthTest();
 
+         Manager.DrawDebug3D();
+
         EndMode3D();
+
         DrawFPS(0, 0);
+        Manager.DrawDebug2D();
         EndDrawing();
     }
 
-    Mesher.Abort();
-    Builder.Abort();
+    Manager.Mesher.Abort();
+    Manager.Builder.Abort();
 
     UnloadMeshes();
 

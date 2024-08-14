@@ -5,6 +5,7 @@
 #include <deque>
 #include <mutex>
 #include <functional>
+#include <set>
 #include <thread>
 
 namespace Voxels
@@ -12,9 +13,11 @@ namespace Voxels
     class WorldBuilder
     {
     public:
-        WorldBuilder(World& world, std::function<void(Chunk&)> func);
+        WorldBuilder(World& world);
 
         ~WorldBuilder();
+
+        void SetGenerationFunction(std::function<void(Chunk&)> func);
 
         void Abort();
 
@@ -33,6 +36,8 @@ namespace Voxels
         Voxels::World& WorldMap;
 
         std::deque<ChunkId> PendingChunks;
+        std::set<uint64_t> ProcessingChunks;
+
         std::deque<ChunkId> CompletedChunks;
 
         std::function<void(Chunk&)> GenerationFunction;
