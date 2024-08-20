@@ -28,10 +28,10 @@ For a C++ project simply rename the file to .cpp and run premake
 
 #include "resource_dir.h"
 #include "lighting_system.h"
+#include "environment_manager.h"
 
 #include "object_transform.h"
 #include "raymath_operators.h"
-
 
 #include "voxel_lib.h"
 #include "chunk_mesher.h"
@@ -91,40 +91,38 @@ void MoveCamera(ObjectTransform& transform)
         transform.MoveV(-speed);
 }
 
-void UnloadMeshes()
-{
-//     for (auto id : UseableChunks)
-//     {
-//         Chunk* chunk = Map.GetChunk(id);
-//         if (!chunk || chunk->GetStatus() != ChunkStatus::Useable)
-//             continue;
-// 
-//         UnloadMesh(chunk->ChunkMesh);
-//         chunk->ChunkMesh.vaoId = 0;
-//         chunk->SetStatus(ChunkStatus::Generated);
-//     }
-}
-
 int main()
 {
     SearchAndSetResourceDir("resources");
 
+    SetTraceLogLevel(LOG_WARNING);
+
     // set up the window
+    SetConfigFlags(FLAG_WINDOW_HIGHDPI);
     SetConfigFlags(FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(1280, 800, "Voxels");
+    int screenX = 1280;
+    int screenY = 800;
+#ifndef _DEBUG
+    screenX = screenY = 0;
+
+    SetConfigFlags(FLAG_FULLSCREEN_MODE);
+#endif
+
+    InitWindow(screenX, screenY, "Voxels");
     SetTargetFPS(500);
 
     SetupBlocks();
+    Environment::Load();
 
     auto shader = LoadShader("shaders/lighting.vert", "shaders/lighting.frag");
 
     auto fogFactorLoc = GetShaderLocation(shader, "fogDensity");
     auto fogColorLoc = GetShaderLocation(shader, "fogColor");
 
-    float factor = 0.005f;
+    float factor = 100.1f;
     SetShaderValue(shader, fogFactorLoc, &factor, SHADER_UNIFORM_FLOAT);
 
-    float fogColor[4] = { SKYBLUE.r / 255.0f,SKYBLUE.g / 255.0f,SKYBLUE.b / 255.0f, 0};
+    float fogColor[4] = { WHITE.r / 255.0f,WHITE.g / 255.0f,WHITE.b / 255.0f, 0};
     SetShaderValue(shader, fogColorLoc, fogColor, SHADER_UNIFORM_VEC4);
 
     Lights::SetLightingShader(shader);
@@ -156,9 +154,13 @@ int main()
         ClearBackground(SKYBLUE);
 
         CameraTransform.SetCamera(ViewCamera);
-        Lights::UpdateLights(ViewCamera);
-        BeginMode3D(ViewCamera);
 
+
+        Environment::DrawBackground(ViewCamera);
+        Lights::UpdateLights(ViewCamera);
+
+        BeginMode3D(ViewCamera);
+        Environment::DrawPreChunk(ViewCamera);
         Manager.DoForEachRenderChunk([&cubeMat](Chunk* chunk)
             {                
                 constexpr float fadeSpeed = 1.0f/ 0.5f;
@@ -175,28 +177,27 @@ int main()
 
                 DrawMesh(chunk->ChunkMesh, cubeMat, MatrixTranslate(chunk->Id.Coordinate.h * float(Chunk::ChunkSize), 0, chunk->Id.Coordinate.v * float(Chunk::ChunkSize)));
             });
+        Environment::DrawPostChunk(ViewCamera);
+        rlDrawRenderBatchActive();
+        rlDisableDepthTest();
+        DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 10,0,0 }, RED);
+        DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,5,0 }, GREEN);
+        DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,0,10 }, BLUE);
+        rlDrawRenderBatchActive();
+        rlEnableDepthTest();
 
-         rlDrawRenderBatchActive();
-         rlDisableDepthTest();
-         DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 10,0,0 }, RED);
-         DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,5,0 }, GREEN);
-         DrawLine3D(Vector3{ 0,0,0 }, Vector3{ 0,0,10 }, BLUE);
-         rlDrawRenderBatchActive();
-         rlEnableDepthTest();
-
-         Manager.DrawDebug3D();
+        Manager.DrawDebug3D();
 
         EndMode3D();
-
+        Environment::DrawForeground(ViewCamera);
         DrawFPS(0, 0);
         Manager.DrawDebug2D();
+
         EndDrawing();
     }
 
-    Manager.Mesher.Abort();
-    Manager.Builder.Abort();
-
-    UnloadMeshes();
+    Manager.Abort();
+    Environment::Unload();
 
     UnloadTexture(BlockTexture);
 

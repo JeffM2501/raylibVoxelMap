@@ -32,6 +32,8 @@ public:
 
     void Update(const Vector3& position);
 
+    void Abort();
+
     void DrawDebug3D();
     void DrawDebug2D();
 

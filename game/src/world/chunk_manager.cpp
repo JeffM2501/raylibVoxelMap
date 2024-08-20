@@ -185,6 +185,26 @@ void ChunkManager::Update(const Vector3& position)
     }
 }
 
+void ChunkManager::Abort()
+{
+    Builder.Abort();
+    Mesher.Abort();
+
+    for (auto& rawId : ChunksWithMeshes)
+    {
+        auto* chunk = Map.GetChunk(ChunkId(rawId));
+        if (chunk)
+        {
+            chunk->Alpha = 0;
+            UnloadMesh(chunk->ChunkMesh);
+            chunk->ChunkMesh.vaoId = 0;
+            chunk->SetStatus(ChunkStatus::Generated);
+        }
+    }
+
+    ChunksWithMeshes.clear();
+}
+
 void ChunkManager::ValidateChunkGeneration(Voxels::ChunkId id)
 {
     auto* chunk = Map.GetChunk(id);
