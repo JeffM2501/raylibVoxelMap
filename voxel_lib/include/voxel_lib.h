@@ -88,6 +88,7 @@ namespace Voxels
         Empty,
         Generating,
         Generated,
+        Populated,
         Meshing,
         Meshed,
         Useable,
@@ -111,6 +112,8 @@ namespace Voxels
 
         BlockType GetVoxel(int h, int v, int d);
         void SetVoxel(int h, int v, int d, BlockType block);
+
+        int Chunk::GetTopBlockDepth(int h, int v);
 
         bool BlockIsSolid(int h, int v, int d);
 

@@ -17,3 +17,4 @@ static constexpr Voxels::BlockType Leaves = 9;
 void SetupWorldData(Texture2D& texture);
 
 void ChunkGenerationFunction(Voxels::Chunk& chunk);
+void ChunkPopulationFunction(Voxels::Chunk& chunk);

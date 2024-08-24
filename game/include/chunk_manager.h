@@ -39,6 +39,8 @@ public:
 
     void DoForEachRenderChunk(std::function<void(Voxels::Chunk*)> func);
 
+    void ToggleShowPreloadChunks() { ShowPreloadChunks = !ShowPreloadChunks; }
+
     Voxels::WorldBuilder Builder;
     Voxels::ChunkMeshTaskPool Mesher;
 
@@ -55,6 +57,8 @@ private:
 
     static constexpr int RenderDistance = 5;
     static constexpr int LoadDistance = 4;
+
+    bool ShowPreloadChunks = true;
 
     Vector3                     WorldSpacePosition = { 0 };
 

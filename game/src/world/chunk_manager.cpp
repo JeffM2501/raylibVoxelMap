@@ -83,12 +83,19 @@ void ChunkManager::DrawDebugChunk(Voxels::ChunkId id, Color tint)
 
 void ChunkManager::DrawDebug3D()
 {
-    for (auto& area : LoadedArea)
+    if (ShowPreloadChunks)
     {
-        area.DoForEach([this](ChunkId id) 
-            {
-                DrawDebugChunk(id, ColorAlpha(MAROON, 0.25f));
-            });
+        for (auto& area : LoadedArea)
+        {
+            area.DoForEach([this](ChunkId id)
+                {
+                    bool useable = false;
+                    if (Map.GetChunk(id) != nullptr)
+                        useable = Map.GetChunk(id)->GetStatus() == ChunkStatus::Useable;
+
+                    DrawDebugChunk(id, ColorAlpha(useable ? DARKGREEN : MAROON, 0.25f));
+                });
+        }
     }
 }
 

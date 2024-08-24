@@ -17,7 +17,8 @@ namespace Voxels
 
         ~WorldBuilder();
 
-        void SetGenerationFunction(std::function<void(Chunk&)> func);
+        void SetTerrainGenerationFunction(std::function<void(Chunk&)> func);
+        void SetPopulateFunction(std::function<void(Chunk&)> func);
 
         void Abort();
 
@@ -30,6 +31,7 @@ namespace Voxels
         void ProcessQueue();
 
         bool PopPendingChunk(ChunkId* chunk);
+        bool PopPendingPopulationChunk(ChunkId* chunk);
 
         void StopQueue();
 
@@ -38,9 +40,11 @@ namespace Voxels
         std::deque<ChunkId> PendingChunks;
         std::set<uint64_t> ProcessingChunks;
 
+        std::list<ChunkId> PendingPopulationChunks;
         std::deque<ChunkId> CompletedChunks;
 
-        std::function<void(Chunk&)> GenerationFunction;
+        std::function<void(Chunk&)> TerrainGenerationFunction;
+        std::function<void(Chunk&)> PopulationGenerationFunction;
 
         std::thread WorkerThread; // pool this?
 

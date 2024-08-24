@@ -24,6 +24,35 @@ void SetupWorldData(Texture2D& texture)
     constexpr int chunkCount = 5;
 }
 
+void ChunkPopulationFunction(Voxels::Chunk& chunk)
+{
+    int32_t chunkH = chunk.Id.Coordinate.h;
+    int32_t chunkV = chunk.Id.Coordinate.v;
+
+    for (int v = 0; v < Chunk::ChunkSize; v++)
+    {
+        for (int h = 0; h < Chunk::ChunkSize; h++)
+        {
+            float hvScale = 4.5f;
+
+            int64_t worldH = (h + (chunkH * Chunk::ChunkSize));
+            int64_t worldV = (v + (chunkV * Chunk::ChunkSize));
+
+            if (stb_perlin_fbm_noise3(worldH * hvScale, worldV * hvScale, 1.0f, 3.0f, 1.5f, 2) > 1.3f)
+            {
+                int d = chunk.GetTopBlockDepth(h, v);
+                if (chunk.GetVoxel(h, v, d) == Grass)
+                {
+                    for (int treeD = 0; treeD < 4; treeD++)
+                    {
+                        chunk.SetVoxel(h, v, d + 1 + treeD, Tree);
+                    }
+                }
+            }
+        }
+    }
+}
+
 void ChunkGenerationFunction(Voxels::Chunk& chunk)
 {
     int32_t chunkH = chunk.Id.Coordinate.h;

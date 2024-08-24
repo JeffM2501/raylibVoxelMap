@@ -60,7 +60,8 @@ void SetupBlocks()
 
     SetupWorldData(BlockTexture);
 
-    Manager.Builder.SetGenerationFunction(ChunkGenerationFunction);
+    Manager.Builder.SetTerrainGenerationFunction(ChunkGenerationFunction);
+    Manager.Builder.SetPopulateFunction(ChunkPopulationFunction);
 }
 
 void MoveCamera(ObjectTransform& transform)
@@ -119,10 +120,10 @@ int main()
     auto fogFactorLoc = GetShaderLocation(shader, "fogDensity");
     auto fogColorLoc = GetShaderLocation(shader, "fogColor");
 
-    float factor = 100.1f;
+    float factor = 100.0f;
     SetShaderValue(shader, fogFactorLoc, &factor, SHADER_UNIFORM_FLOAT);
 
-    float fogColor[4] = { WHITE.r / 255.0f,WHITE.g / 255.0f,WHITE.b / 255.0f, 0};
+    float fogColor[4] = { WHITE.r / 255.0f,WHITE.g / 255.0f,WHITE.b / 255.0f, 255};
     SetShaderValue(shader, fogColorLoc, fogColor, SHADER_UNIFORM_VEC4);
 
     Lights::SetLightingShader(shader);
@@ -154,7 +155,6 @@ int main()
         ClearBackground(SKYBLUE);
 
         CameraTransform.SetCamera(ViewCamera);
-
 
         Environment::DrawBackground(ViewCamera);
         Lights::UpdateLights(ViewCamera);

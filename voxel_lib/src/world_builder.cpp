@@ -7,9 +7,14 @@ namespace Voxels
     {
     }
 
-    void WorldBuilder::SetGenerationFunction(std::function<void(Chunk&)> func)
+    void WorldBuilder::SetTerrainGenerationFunction(std::function<void(Chunk&)> func)
     {
-        GenerationFunction = func;
+        TerrainGenerationFunction = func;
+    }
+
+    void WorldBuilder::SetPopulateFunction(std::function<void(Chunk&)> func)
+    {
+        PopulationGenerationFunction = func;
     }
 
     WorldBuilder::~WorldBuilder()
@@ -83,6 +88,24 @@ namespace Voxels
         return true;
     }
 
+    bool WorldBuilder::PopPendingPopulationChunk(ChunkId* chunk)
+    {
+        std::lock_guard guard(QueueMutex);
+        if (PendingPopulationChunks.empty() || !chunk)
+            return false;
+
+        for (auto itr = PendingPopulationChunks.begin(); itr != PendingPopulationChunks.end(); itr++)
+        {
+            if (WorldMap.SurroundingChunksGenerated(*itr))
+            {
+                *chunk = *itr;
+                PendingPopulationChunks.erase(itr);
+                return true;
+            }
+        }
+        return false;
+    }
+
     void WorldBuilder::StopQueue()
     {
         std::lock_guard guard(RunMutex);
@@ -105,23 +128,56 @@ namespace Voxels
             }
 
             ChunkId processChunk;
+            
+            bool didSomething = false;
 
-            if (!PopPendingChunk(&processChunk))
+            if (PopPendingPopulationChunk(&processChunk))
+            {
+                auto* chunk = WorldMap.GetChunk(processChunk.Coordinate.h, processChunk.Coordinate.v);
+
+                if(PopulationGenerationFunction)
+                    PopulationGenerationFunction(*chunk);
+
+                chunk->SetStatus(ChunkStatus::Populated);
+
+                std::lock_guard outBoundGuard(QueueMutex);
+                CompletedChunks.push_back(processChunk);
+
+                didSomething = true;
+            }
+
+            if (PopPendingChunk(&processChunk))
+            {
+                auto& chunk = WorldMap.AddChunk(processChunk.Coordinate.h, processChunk.Coordinate.v);
+                if (chunk.GetStatus() != ChunkStatus::Empty)
+                    continue;
+
+                chunk.SetStatus(ChunkStatus::Generating);
+                TerrainGenerationFunction(chunk);
+                chunk.SetStatus(ChunkStatus::Generated);
+
+                if (WorldMap.SurroundingChunksGenerated(processChunk))
+                {
+                    if (PopulationGenerationFunction)
+                        PopulationGenerationFunction(chunk);
+
+                    chunk.SetStatus(ChunkStatus::Populated);
+
+                    std::lock_guard outBoundGuard(QueueMutex);
+                    CompletedChunks.push_back(processChunk);
+                }
+                else
+                {
+                    PendingPopulationChunks.push_back(processChunk);
+                }
+                didSomething = true;
+            }
+
+            if (!didSomething)
             {
                 StopQueue();
                 return;
             }
-   
-            auto &chunk = WorldMap.AddChunk(processChunk.Coordinate.h, processChunk.Coordinate.v);
-            if (chunk.GetStatus() != ChunkStatus::Empty)
-                continue;
-
-            chunk.SetStatus(ChunkStatus::Generating);
-            GenerationFunction(chunk);
-            chunk.SetStatus(ChunkStatus::Generated);
-
-            std::lock_guard outBoundGuard(QueueMutex);
-            CompletedChunks.push_back(processChunk);
         }
     }
 }

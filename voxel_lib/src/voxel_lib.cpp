@@ -42,12 +42,23 @@ namespace Voxels
         BlockInfos.insert_or_assign(blockId, block);
     }
 
-    Voxels::BlockType Chunk::GetVoxel(int h, int v, int d)
+    BlockType Chunk::GetVoxel(int h, int v, int d)
     {
         if (h < 0 || h >= ChunkSize || v < 0 || v >= ChunkSize || d < 0 || d >= ChunkHeight)
             return InvalidBlock;
 
         return Blocks[(d * ChunkSize * ChunkSize) + (v * ChunkSize) + h];
+    }
+
+    int Chunk::GetTopBlockDepth(int h, int v)
+    {
+        for (int d = ChunkHeight; d > 0; d--)
+        {
+            if (BlockIsSolid(h, v, d-1))
+                return d-1;
+        }
+
+        return -1;
     }
 
     void Chunk::SetVoxel(int h, int v, int d, BlockType block)

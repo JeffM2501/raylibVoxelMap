@@ -115,7 +115,7 @@ void main()
         float dist = length(viewPos - fragPosition);
 
         // Exponential fog
-        float fogFactor = 1.0/exp((dist*fogDensity)*(dist*fogDensity));
+        float fogFactor = 1.0/exp((dist/fogDensity)*(dist/fogDensity));
 
         fogFactor = clamp(fogFactor, 0.0, 1.0);
 
