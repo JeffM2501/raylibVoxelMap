@@ -42,6 +42,8 @@ For a C++ project simply rename the file to .cpp and run premake
 #include "world_def.h"
 #include "external/stb_perlin.h"
 
+#include "tasks.h"
+
 #include <set>
 
 using namespace Voxels;
@@ -112,6 +114,8 @@ int main()
     InitWindow(screenX, screenY, "Voxels");
     SetTargetFPS(500);
 
+    Tasks::Init();
+
     SetupBlocks();
     Environment::Load();
 
@@ -143,7 +147,6 @@ int main()
     Vector3 lightDirection = { -2, -3, 1 };
     auto* light = static_cast<Lights::DirectionalLight*>(Lights::AddLight(Lights::LightTypes::Directional));
     light->SetDirection(lightDirection);
-
     // game loop
     while (!WindowShouldClose())
     {
@@ -195,7 +198,7 @@ int main()
 
         EndDrawing();
     }
-
+    Tasks::Shutdown();
     Manager.Abort();
     Environment::Unload();
 

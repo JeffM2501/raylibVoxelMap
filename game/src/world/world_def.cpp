@@ -18,8 +18,8 @@ void SetupWorldData(Texture2D& texture)
     SetBlockInfo(Gold, Rectangle{ blockWidth * 5,0,blockWidth * 6,blockHeight });
     SetBlockInfo(Copper, Rectangle{ blockWidth * 6,0,blockWidth * 7,blockHeight });
 
-    SetBlockInfo(Tree, Rectangle{ 0, blockHeight, blockWidth * 1, blockHeight*2 });
-    SetBlockInfo(Leaves, Rectangle{ blockWidth * 1, blockHeight,blockWidth * 2, blockHeight*2 });
+    SetBlockInfo(Tree, Rectangle{ 0, blockHeight, blockWidth * 1, blockHeight*2 }, Rectangle{ blockWidth * 1, blockHeight,blockWidth * 2, blockHeight * 2 });
+    SetBlockInfo(Leaves, Rectangle{ blockWidth * 2, blockHeight,blockWidth * 3, blockHeight*2 });
 
     constexpr int chunkCount = 5;
 }
@@ -47,6 +47,7 @@ void ChunkPopulationFunction(Voxels::Chunk& chunk)
                     {
                         chunk.SetVoxel(h, v, d + 1 + treeD, Tree);
                     }
+                    chunk.SetVoxel(h, v, d + 1 + 4, Leaves);
                 }
             }
         }

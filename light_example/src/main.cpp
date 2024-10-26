@@ -30,7 +30,6 @@ For a C++ project simply rename the file to .cpp and run premake
 #include "lighting_system.h"
 
 #include "object_transform.h"
-#include "raymath_operators.h"
 
 int main ()
 {

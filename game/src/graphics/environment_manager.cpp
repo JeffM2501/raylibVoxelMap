@@ -75,10 +75,10 @@ namespace Environment
 
         float sunspeed = 1.0f / 5.0f;
 
-        rlRotatef((GetTime() * sunspeed) + 45, 0, 0, 1);
+        rlRotatef((float(GetTime()) * sunspeed) + 45, 0, 0, 1);
         rlTranslatef(50, 0, 0);
 
-        float coronaSize = 6 + sinf(GetTime());
+        float coronaSize = 6 + sinf(float(GetTime()));
         DrawCube(Vector3{ 0,0,0 }, -coronaSize,-coronaSize,-coronaSize, ColorAlpha(YELLOW,0.5f));
         DrawCube(Vector3{ 0,0,0 }, 4,4,4, ColorAlpha(RAYWHITE, 0.75f));
 

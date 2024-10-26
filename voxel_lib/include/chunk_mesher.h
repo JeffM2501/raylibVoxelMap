@@ -57,6 +57,8 @@ namespace Voxels
         void StartQueue();
         void ProcessQueue();
 
+        bool RunOneTask();
+
         bool PopPendingChunk(ChunkId* chunk);
         bool PendingChunksEmpty();
 

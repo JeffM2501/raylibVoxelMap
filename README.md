@@ -15,11 +15,16 @@ This is a C++ version of rlights.h that supports attenuation and spotlights
 
 
 # TODO
+ * Threadpools
+ * Collision
+ * LOD
+ * Dirty Chunks
+ * Serialization
  * Floating Origin
- * Skybox
  * Water
  * Better World Generation
  * Trees
+ * Entities
 
 
 # License

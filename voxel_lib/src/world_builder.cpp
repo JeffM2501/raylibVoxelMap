@@ -1,5 +1,7 @@
 #include "world_builder.h"
 
+#include "tasks.h"
+
 namespace Voxels
 {
     WorldBuilder::WorldBuilder(World& world)
@@ -61,6 +63,9 @@ namespace Voxels
 
     void WorldBuilder::StartQueue()
     {
+        Tasks::AddTask([this]() { RunOneTask(); });
+        return;
+
         std::lock_guard guard(RunMutex);
 
         if (RunQueue)
@@ -112,6 +117,57 @@ namespace Voxels
         RunQueue = false;
     }
 
+    bool WorldBuilder::RunOneTask()
+    {
+        ChunkId processChunk;
+
+        bool didSomething = false;
+
+        if (PopPendingPopulationChunk(&processChunk))
+        {
+            auto* chunk = WorldMap.GetChunk(processChunk.Coordinate.h, processChunk.Coordinate.v);
+
+            if (PopulationGenerationFunction)
+                PopulationGenerationFunction(*chunk);
+
+            chunk->SetStatus(ChunkStatus::Populated);
+
+            std::lock_guard outBoundGuard(QueueMutex);
+            CompletedChunks.push_back(processChunk);
+
+            didSomething = true;
+        }
+
+        if (PopPendingChunk(&processChunk))
+        {
+            auto& chunk = WorldMap.AddChunk(processChunk.Coordinate.h, processChunk.Coordinate.v);
+            if (chunk.GetStatus() != ChunkStatus::Empty)
+                return true;
+
+            chunk.SetStatus(ChunkStatus::Generating);
+            TerrainGenerationFunction(chunk);
+            chunk.SetStatus(ChunkStatus::Generated);
+
+            if (WorldMap.SurroundingChunksGenerated(processChunk))
+            {
+                if (PopulationGenerationFunction)
+                    PopulationGenerationFunction(chunk);
+
+                chunk.SetStatus(ChunkStatus::Populated);
+
+                std::lock_guard outBoundGuard(QueueMutex);
+                CompletedChunks.push_back(processChunk);
+            }
+            else
+            {
+                PendingPopulationChunks.push_back(processChunk);
+            }
+            didSomething = true;
+        }
+
+        return didSomething;
+    }
+
     void WorldBuilder::ProcessQueue()
     {
         bool run = true;
@@ -127,53 +183,7 @@ namespace Voxels
                 }
             }
 
-            ChunkId processChunk;
-            
-            bool didSomething = false;
-
-            if (PopPendingPopulationChunk(&processChunk))
-            {
-                auto* chunk = WorldMap.GetChunk(processChunk.Coordinate.h, processChunk.Coordinate.v);
-
-                if(PopulationGenerationFunction)
-                    PopulationGenerationFunction(*chunk);
-
-                chunk->SetStatus(ChunkStatus::Populated);
-
-                std::lock_guard outBoundGuard(QueueMutex);
-                CompletedChunks.push_back(processChunk);
-
-                didSomething = true;
-            }
-
-            if (PopPendingChunk(&processChunk))
-            {
-                auto& chunk = WorldMap.AddChunk(processChunk.Coordinate.h, processChunk.Coordinate.v);
-                if (chunk.GetStatus() != ChunkStatus::Empty)
-                    continue;
-
-                chunk.SetStatus(ChunkStatus::Generating);
-                TerrainGenerationFunction(chunk);
-                chunk.SetStatus(ChunkStatus::Generated);
-
-                if (WorldMap.SurroundingChunksGenerated(processChunk))
-                {
-                    if (PopulationGenerationFunction)
-                        PopulationGenerationFunction(chunk);
-
-                    chunk.SetStatus(ChunkStatus::Populated);
-
-                    std::lock_guard outBoundGuard(QueueMutex);
-                    CompletedChunks.push_back(processChunk);
-                }
-                else
-                {
-                    PendingPopulationChunks.push_back(processChunk);
-                }
-                didSomething = true;
-            }
-
-            if (!didSomething)
+            if (!RunOneTask())
             {
                 StopQueue();
                 return;

@@ -1,5 +1,6 @@
 #include "chunk_mesher.h"
 
+#include "tasks.h"
 
 namespace Voxels
 {
@@ -153,6 +154,12 @@ namespace Voxels
 
     void ChunkMeshTaskPool::StartQueue()
     {
+//         Tasks::AddTask([this]()
+//             {
+//                 RunOneTask();
+//             });
+// 
+//         return;
         std::lock_guard guard(RunMutex);
 
         if (RunQueue)
@@ -163,6 +170,29 @@ namespace Voxels
 
         RunQueue = true;
         WorkerThread = std::thread([this]() { ProcessQueue(); });
+    }
+
+    bool ChunkMeshTaskPool::RunOneTask()
+    {
+        ChunkId processChunk;
+
+        if (!PopPendingChunk(&processChunk))
+        {
+            return false;
+        }
+
+        ChunkMesher mesher(Map, processChunk);
+        mesher.BuildMesh();
+
+        Chunk* chunk = Map.GetChunk(processChunk);
+
+        chunk->ChunkMesh = mesher.GetMesh();
+        chunk->SetStatus(ChunkStatus::Meshed);
+
+        std::lock_guard outBoundGuard(QueueMutex);
+        CompletedChunks.push_back(processChunk);
+
+        return true;
     }
 
     void ChunkMeshTaskPool::ProcessQueue()
@@ -180,24 +210,10 @@ namespace Voxels
                 }
             }
 
-            ChunkId processChunk;
-
-            if (!PopPendingChunk(&processChunk))
+            if (!RunOneTask())
             {
                 StopQueue();
-                return;
             }
-
-            ChunkMesher mesher(Map, processChunk);
-            mesher.BuildMesh();
-
-            Chunk * chunk = Map.GetChunk(processChunk);
-
-            chunk->ChunkMesh = mesher.GetMesh();
-            chunk->SetStatus(ChunkStatus::Meshed);
-
-            std::lock_guard outBoundGuard(QueueMutex);
-            CompletedChunks.push_back(processChunk);
         }
     }
 

@@ -115,7 +115,7 @@ namespace Lights
 
     void UpdateLights(const Camera3D& viewportCamera)
     {
-        if (!IsShaderReady(LightShader))
+        if (!IsShaderValid(LightShader))
             return;
         SetShaderValue(LightShader, AmbientLoc, Ambient, SHADER_UNIFORM_VEC4);
 
@@ -138,7 +138,7 @@ namespace Lights
     Light::~Light()
     {
         // disable on destroy
-        if (IsShaderReady(LightShader) && EnabledLoc > 0)
+        if (IsShaderValid(LightShader) && EnabledLoc > 0)
         {
             int enabled = 0;
             SetShaderValue(LightShader, EnabledLoc, &enabled, SHADER_UNIFORM_INT);
@@ -147,7 +147,7 @@ namespace Lights
 
     bool Light::Update()
     {
-        if (!IsShaderReady(LightShader) || !IsDirty())
+        if (!IsShaderValid(LightShader) || !IsDirty())
             return false;
 
         Dirty = false;
@@ -209,7 +209,7 @@ namespace Lights
     void Light::OnBindToShader()
     {
         SetDirty();
-        if (!IsShaderReady(LightShader))
+        if (!IsShaderValid(LightShader))
             return;
 
         EnabledLoc = GetShaderLocation(EnabledName);
